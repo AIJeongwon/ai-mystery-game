@@ -1,0 +1,60 @@
+// 의제와 일정 종류
+// poles: [진행 100 쪽 결말, 진행 0 쪽 결말]. kinds: 이 의제에서 잡힐 수 있는 일정 종류(SCHEDULE_KINDS의 키)
+const AG = (id, title, cat, country, progress, desc, poles, actors = [], kinds = ["vote"]) => ({
+  id, title, cat, country, progress, momentum: 0, heat: 20, desc, poles, actors, kinds,
+});
+export const AGENDAS = [
+  AG("kr_pension", "국민연금 개혁안", "pol", "410", 42, "보험료율 인상과 수급 연령 조정을 둘러싼 여야 대치.", ["개혁안 통과", "개혁 무산"], ["kr_pres", "kr_opp"], ["vote", "protest", "talks"]),
+  AG("kr_chip", "반도체 특별법과 수출 규제 대응", "eco", "410", 55, "보조금 규모와 대기업 특혜 논란.", ["특별법 시행", "법안 표류"], ["kr_taesung", "kr_pres"], ["vote", "earnings"]),
+  AG("kr_redevelop", "수도권 도심 재개발 갈등", "soc", "410", 48, "원주민·세입자 대책 없이 속도를 내는 정비사업.", ["세입자 보호 입법", "사업 강행"], ["kr_mayor"], ["protest", "ruling"]),
+  AG("kr_platform", "온라인 플랫폼 규제법", "sci", "410", 35, "자사 우대 금지와 알고리즘 공개 의무.", ["규제법 통과", "자율규제 유지"], ["kr_nodeul", "kr_opp"], ["vote", "hearing"]),
+  AG("kr_broadcast", "공영방송 지배구조 개편", "med", "410", 50, "이사회 구성 방식과 수신료 분리 징수.", ["지배구조 개편", "현행 유지"], ["kr_pres", "kr_opp"], ["vote", "hearing"]),
+  AG("us_midterm", "미국 중간선거 정국", "pol", "840", 50, "의회 다수당 향방을 가를 선거전.", ["여당 수성", "야당 탈환"], ["us_pres", "us_opp"], ["election", "debate"]),
+  AG("us_ai", "AI 안전법 입법", "sci", "840", 40, "초거대 모델 사전 심사제를 둘러싼 빅테크 로비전.", ["안전법 통과", "법안 폐기"], ["us_helix", "us_opp"], ["vote", "hearing", "launch"]),
+  AG("us_tariff", "미국 보편 관세 재협상", "int", "840", 45, "동맹국 대상 관세율 조정 협상.", ["관세 인하 합의", "관세 장벽 강화"], ["us_pres", "cn_lead"], ["summit", "talks"]),
+  AG("us_rate", "기준금리 인하 시점", "eco", "840", 50, "물가와 고용 사이에서 갈리는 통화정책.", ["금리 인하", "고금리 유지"], ["us_fed"], ["ruling", "earnings"]),
+  AG("cn_property", "중국 부동산 구조조정", "eco", "156", 38, "대형 개발사 채무 재조정과 지방정부 부채.", ["연착륙", "연쇄 부실"], ["cn_lead"], ["ruling", "earnings"]),
+  AG("cn_tech", "기술 자립 5개년 계획", "sci", "156", 60, "첨단 반도체 내재화 목표.", ["자립 목표 달성", "계획 지연"], ["cn_huaxing", "cn_lead"], ["launch", "earnings"]),
+  AG("jp_defense", "일본 방위비 증액 논쟁", "pol", "392", 52, "증세로 재원을 마련할지를 두고 연립 여당 내 균열.", ["증액안 통과", "증액 보류"], ["jp_pm", "jp_mitsuhara"], ["vote", "debate"]),
+  AG("eu_ai", "유럽 AI 규제 시행령", "sci", "276", 65, "고위험 AI 인증제 시행 시기.", ["전면 시행", "시행 유예"], ["de_chan", "us_helix"], ["vote", "hearing"]),
+  AG("eu_energy", "유럽 에너지 전환 보조금", "eco", "250", 47, "원전·재생에너지 보조금 배분 다툼.", ["공동 기금 합의", "회원국 각자도생"], ["fr_pres", "de_chan"], ["summit", "talks"]),
+  AG("gb_licence", "영국 공영방송 수신료 폐지", "med", "826", 44, "수신료를 없애고 구독제로 바꾸자는 정부안.", ["수신료 폐지", "수신료 유지"], ["gb_pm", "gb_crane"], ["vote", "hearing"]),
+  AG("fr_pension", "프랑스 정년 연장 반대 시위", "soc", "250", 50, "노조 총파업과 정부의 강행 처리.", ["정년 연장 확정", "개혁 철회"], ["fr_pres"], ["protest", "vote"]),
+  AG("de_auto", "독일 자동차 산업 구조조정", "eco", "276", 40, "전기차 전환과 공장 폐쇄.", ["전환 성공", "대량 감원"], ["de_rheinwerk", "de_chan"], ["earnings", "protest", "talks"]),
+  AG("ua_talks", "동유럽 휴전 협상", "int", "804", 35, "국경선과 안전 보장을 둘러싼 다자 협상.", ["휴전 합의", "협상 결렬"], ["ua_pres", "ru_pres", "wc_sg"], ["summit", "talks"]),
+  AG("in_data", "인도 디지털 개인정보법", "sci", "356", 58, "데이터 현지화 의무와 빅테크의 반발.", ["현지화 의무 시행", "의무 완화"], ["in_pm", "us_helix"], ["vote", "ruling"]),
+  AG("in_election", "인도 주의회 선거", "pol", "356", 50, "집권당의 지역 기반을 시험하는 선거.", ["집권당 승리", "야권 연합 승리"], ["in_pm"], ["election", "debate"]),
+  AG("br_amazon", "아마존 보전 기금", "int", "076", 54, "선진국 출연금과 개발 제한 구역 지정.", ["기금 출범", "기금 무산"], ["br_pres", "wc_sg"], ["summit", "talks", "protest"]),
+  AG("mx_water", "멕시코 북부 물 분쟁", "soc", "484", 45, "가뭄과 산업용수 배분을 둘러싼 갈등.", ["배분 협약", "분쟁 장기화"], ["mx_pres"], ["protest", "ruling"]),
+  AG("ke_water", "나이로비 상수도 위탁 운영", "soc", "404", 62, "오르비스 그룹의 정수 사업 확대와 요금 인상.", ["위탁 확대", "공영 환원"], ["ch_orbis", "ke_pres"], ["vote", "protest", "hearing"]),
+  AG("ng_fuel", "나이지리아 연료 보조금 폐지", "eco", "566", 48, "보조금 폐지에 따른 물가 급등.", ["폐지 유지", "보조금 부활"], ["ng_pres"], ["protest", "vote"]),
+  AG("za_power", "남아공 전력난", "soc", "710", 40, "순환 정전과 전력 공기업 개편.", ["전력망 정상화", "정전 상시화"], ["za_pres"], ["hearing", "protest"]),
+  AG("sa_opec", "산유국 감산 합의", "eco", "682", 52, "감산 연장과 유가.", ["감산 연장", "증산 전환"], ["sa_min"], ["summit", "talks"]),
+  AG("tr_const", "튀르키예 개헌 국민투표", "pol", "792", 47, "대통령 임기 제한 조항 개정.", ["개헌 가결", "개헌 부결"], ["tr_pres"], ["election", "protest"]),
+  AG("id_capital", "인도네시아 신수도 이전", "pol", "360", 44, "예산 초과와 이전 일정 지연.", ["이전 강행", "이전 축소"], ["id_pres"], ["vote", "hearing"]),
+  AG("au_media", "호주 뉴스 사용료 법", "med", "036", 56, "플랫폼이 언론사에 기사 사용료를 내도록 한 법의 개정.", ["사용료 의무 확대", "법 폐지"], ["au_pm", "us_helix"], ["vote", "hearing"]),
+  // 세계 의제
+  AG("g_climate", "나이로비 기후 총회", "int", null, 46, "개도국 기후 손실 기금의 분담 비율.", ["분담 합의", "총회 결렬"], ["wc_sg", "ke_pres", "us_pres", "cn_lead"], ["summit", "talks", "protest"]),
+  AG("g_digitaltax", "글로벌 디지털세 협상", "eco", null, 41, "다국적 플랫폼 과세권 배분.", ["다자 조약 서명", "개별 과세 난립"], ["us_helix", "fr_pres", "in_pm"], ["summit", "talks"]),
+  AG("g_pandemic", "감염병 조약 개정", "soc", null, 53, "병원체 정보 공유와 백신 배분 의무.", ["조약 개정", "개정 무산"], ["iheo", "wc_sg"], ["summit", "vote"]),
+  AG("g_moon", "달 기지 국제 컨소시엄", "sci", null, 50, "유인 달 기지 건설 분담과 주도권.", ["공동 기지 착공", "컨소시엄 분열"], ["us_pres", "cn_lead", "jp_pm"], ["launch", "summit"]),
+  AG("g_expo", "2035 세계박람회 유치전", "cul", null, 50, "부산·리야드·로마의 3파전.", ["아시아 개최", "유럽·중동 개최"], ["kr_pres", "sa_min", "it_pm"], ["election", "festival"]),
+  AG("g_press", "국제 언론 자유 헌장", "med", null, 39, "기자 구금 금지와 취재원 보호 국제 규범.", ["헌장 채택", "채택 불발"], ["wc_sg"], ["summit", "vote", "hearing"]),
+  AG("g_grain", "곡물 수출 회랑 협상", "int", null, 44, "흑해 곡물 수출길 재개.", ["회랑 재개", "봉쇄 지속"], ["ua_pres", "ru_pres", "tr_pres", "eg_pres"], ["summit", "talks"]),
+  AG("g_claro", "오르비스 '클라로' 정수 사업 세계 확대", "eco", null, 68, "오르비스 그룹의 정수 첨가제 '클라로'를 개도국 상수도에 보급하는 국제 사업.", ["30개국 추가 도입", "사업 중단"], ["ch_orbis", "iheo"], ["summit", "earnings", "launch"]),
+];
+
+// 일정 종류 → 그 일정이 일으키는 사건 유형
+export const SCHEDULE_KINDS = {
+  vote: { label: "표결", evType: "bill_vote" },
+  election: { label: "선거·투표", evType: "election" },
+  summit: { label: "정상회의", evType: "summit" },
+  talks: { label: "협상", evType: "talks" },
+  ruling: { label: "결정 발표", evType: "ruling" },
+  hearing: { label: "청문회", evType: "hearing" },
+  earnings: { label: "실적 발표", evType: "earnings" },
+  launch: { label: "발표·발사", evType: "launch" },
+  protest: { label: "대규모 집회", evType: "protest" },
+  debate: { label: "토론회", evType: "debate" },
+  festival: { label: "행사 개막", evType: "festival" },
+};
