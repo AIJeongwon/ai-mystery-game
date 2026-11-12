@@ -51,7 +51,7 @@ public/js/
     prologue/  ch1/    장마다 폴더 하나
   ui/          dom map hud drawers panels manage detail interview editor cutscene casefile title
 tests/         시험. LLM을 부르지 않음
-tools/         regression balance probe / share share-check guest-preview / fetch-art process-art
+tools/         regression balance probe / share share-check guest-preview / process-art
 ```
 
 ### 묶음 파일과 가져오기 규칙
