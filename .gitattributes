@@ -1,0 +1,6 @@
+# 줄 끝을 LF로 맞춘다 (Windows에서 받아도 CRLF로 바뀌어 전체가 고쳐진 것처럼 보이지 않게)
+* text=auto eol=lf
+*.bat text eol=crlf
+*.jpg binary
+*.png binary
+*.woff2 binary
