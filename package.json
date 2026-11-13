@@ -1,0 +1,27 @@
+{
+  "name": "gijeongsasil",
+  "version": "0.1.0",
+  "description": "기정사실(記定事實) — 기자 경영 시뮬레이션 + 세계 개변 + 추리 캠페인",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/*.test.mjs\"",
+    "lint": "eslint .",
+    "check": "npm run lint && npm test"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.7.0",
+    "@fontsource/noto-serif-kr": "^5.3.1",
+    "d3": "^7.9.2",
+    "pretendard": "^1.3.9",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "globals": "^17.14.0"
+  }
+}

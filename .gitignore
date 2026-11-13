@@ -2,3 +2,16 @@
 .env
 .env.*
 !.env.example
+
+# 받아서 쓰는 것과 실행 중 생기는 것
+node_modules/
+*.log
+server/usage.json
+
+# 저장소에 올리지 않는 큰 파일: 가공 전 원본 이미지, 터널 실행 파일
+tools/_raw/
+tools/bin/
+
+# 운영체제가 만드는 파일
+.DS_Store
+Thumbs.db
