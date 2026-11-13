@@ -9,7 +9,8 @@
     "dev": "node --watch server/index.js",
     "test": "node --test \"tests/*.test.mjs\"",
     "lint": "eslint .",
-    "check": "npm run lint && npm test"
+    "regress": "node tools/regression.mjs",
+    "check": "npm run lint && npm test && npm run regress"
   },
   "engines": {
     "node": ">=20.12"
