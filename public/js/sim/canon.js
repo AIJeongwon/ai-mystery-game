@@ -115,11 +115,11 @@ export function resolveDecree(sentence, data, targets, ev, via = "llm") {
 // ── 2) 효과 적용 ──
 function applyEffect(e, k = 1) {
   const delta = e.delta * k;
-  let applied = 0;
+  const changes = { applied: 0 };
   const bump = (obj, key, lo, hi) => {
     const before = obj[key];
     obj[key] = clamp(before + delta, lo, hi);
-    applied = obj[key] - before;
+    changes.applied = obj[key] - before;
   };
   if (e.kind === "actor") {
     const a = actor(e.id);
@@ -131,8 +131,12 @@ function applyEffect(e, k = 1) {
     const ag = G.world.agendas[e.id];
     if (ag && !ag.resolved) {
       bump(ag, "progress", 1, 99);
+      const momentumBefore = ag.momentum;
+      const heatBefore = ag.heat;
       ag.momentum = clamp(ag.momentum + e.sign * e.mag * 0.5 * k, -4, 4);
       ag.heat = clamp(ag.heat + 6, 0, 100);
+      changes.momentumApplied = ag.momentum - momentumBefore;
+      changes.heatApplied = ag.heat - heatBefore;
     }
   } else if (e.kind === "event") {
     const ev = G.world.events[e.id];
@@ -140,24 +144,24 @@ function applyEffect(e, k = 1) {
       if (e.attr === "heat") bump(ev, "heat", 0, 100);
       else {
         ev.bias += e.sign * e.mag * k;
-        applied = e.sign * e.mag * k;
+        changes.applied = e.sign * e.mag * k;
       }
     }
   } else if (e.kind === "outlet") {
     if (e.id === "player") {
       const before = G.outlet.cred;
       G.outlet.cred = clamp(before + delta, 1, 99);
-      applied = G.outlet.cred - before;
+      changes.applied = G.outlet.cred - before;
     } else if (G.rivals[e.id]) bump(G.rivals[e.id], "cred", 1, 99);
   }
-  return applied;
+  return changes;
 }
 
 // ── 3) 도장을 찍는다 ──
 export function enact(ap, { articleId, ev, title }) {
   const t = now();
   G.canon.ink = Math.max(0, G.canon.ink - ap.cost);
-  const effects = ap.effects.map((e) => ({ ...e, applied: applyEffect(e) }));
+  const effects = ap.effects.map((e) => ({ ...e, ...applyEffect(e) }));
   const cn = {
     id: `cn${++G.canon.seq}`, text: ap.sentence, belief: ap.belief, reaction: ap.reaction, by: "player", at: t,
     expires: ap.holdMin == null ? null : t + ap.holdMin, scope: ap.scope, scopeIdx: ap.scopeIdx, mag: ap.mag,
@@ -183,7 +187,7 @@ export function enact(ap, { articleId, ev, title }) {
 export function plantCanon(def) {
   const effects = (def.effects || []).map((e) => {
     const full = { ...e, delta: e.sign * e.mag * UNIT[e.attr], label: ATTR_KO[e.attr] };
-    return { ...full, applied: def.silent ? 0 : applyEffect(full) };
+    return { ...full, ...(def.silent ? { applied: 0 } : applyEffect(full)) };
   });
   const cn = {
     id: def.id || `cn${++G.canon.seq}`, text: def.text, belief: def.belief || def.text, reaction: def.reaction || "", by: def.by, at: def.at ?? now(),
@@ -198,7 +202,17 @@ export function plantCanon(def) {
 
 // ── 4) 문장이 풀린다 ──
 function unwind(cn, k) {
-  for (const e of cn.effects) {
+  for (const e of [...cn.effects].reverse()) {
+    if (e.kind === "agenda") {
+      const ag = G.world.agendas[e.id];
+      if (ag && !ag.resolved) {
+        // 상한에 걸려 일부만 바뀐 경우에도 실제 적용량만 되돌린다.
+        ag.progress = clamp(ag.progress - e.applied * k, 1, 99);
+        ag.momentum = clamp(ag.momentum - (e.momentumApplied ?? (e.applied ? e.sign * e.mag * 0.5 : 0)) * k, -4, 4);
+        ag.heat = clamp(ag.heat - (e.heatApplied ?? (e.applied ? 6 : 0)) * k, 0, 100);
+      }
+      continue;
+    }
     if (!e.applied) continue;
     applyEffect({ ...e, delta: -e.applied, sign: -Math.sign(e.applied) || 1 }, k);
   }

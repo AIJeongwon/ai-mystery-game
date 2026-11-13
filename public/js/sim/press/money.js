@@ -9,6 +9,7 @@ export function pay(amount, kind = "etc") {
 }
 export function earn(amount, kind = "etc") {
   G.outlet.cash += amount;
-  if (kind in G.outlet.today) G.outlet.today[kind] += amount;
+  if (kind === "etc") G.outlet.today.otherIncome = (G.outlet.today.otherIncome ?? 0) + amount;
+  else if (kind in G.outlet.today) G.outlet.today[kind] += amount;
   G.outlet.totals.revenue += amount;
 }

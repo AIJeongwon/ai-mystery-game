@@ -14,7 +14,8 @@ import { fallbackJudge } from "./judge.js";
 import { gainXp } from "./growth.js";
 
 const DEPTH_PTS = [1, 1.6, 2.6, 3.6];
-export async function publish({ ev, headline, body, appraisal, special }) {
+export async function publish(draft) {
+  const { ev, headline, body, appraisal, special } = draft;
   const g = G;
   const known = ev ? notes(ev.id) : {};
   let j, via = "llm";
@@ -27,8 +28,11 @@ export async function publish({ ev, headline, body, appraisal, special }) {
   if (G !== g) return null;
 
   // 기사 쓰는 동안 세상은 돌아간다
-  spend(50 + Math.min(130, Math.round(body.length / 7)));
+  const minutes = 50 + Math.min(130, Math.round(body.length / 7));
+  return spend(minutes, () => recordArticle(draft, known, j, via));
+}
 
+function recordArticle({ ev, headline, body, appraisal, special }, known, j, via) {
   const o = G.outlet;
   const usedFacts = ev ? [...new Set(j.used || [])].map((id) => ev.facts.find((f) => f.id === id)).filter(Boolean) : [];
   const trueUsed = usedFacts.filter((f) => f.true);

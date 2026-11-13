@@ -24,7 +24,7 @@ export function dailySettlement() {
     interest = Math.round(-o.cash * 0.02);
     pay(interest, "etc");
   }
-  const income = t.ad + t.sub + t.plat;
+  const income = t.ad + t.sub + t.plat + (t.otherIncome ?? 0);
   const expense = t.rent + t.pay + t.bureau + t.travel + t.invest + t.legal + t.etc;
   const rec = { day: dayIndex(now()) - 1, ...t, income, expense, net: income - expense, cash: o.cash, subs: Math.floor(o.subs), cred: o.cred };
   o.ledger.push(rec);

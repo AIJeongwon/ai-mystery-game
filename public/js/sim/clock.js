@@ -17,7 +17,7 @@ let holds = 0;
 let acc = 0;
 let running = false;
 
-function tick() {
+function tick(onMidnight) {
   const t = G.time;
   worldTick();
   directorTick();
@@ -38,13 +38,13 @@ function tick() {
     t.lastDay = day;
     const rec = dailySettlement();
     emit("day", rec);
-    saveGame();
+    onMidnight();
   }
   emit("tick");
 }
 
 // 분 단위로 시간을 보낸다. 30분 경계를 넘을 때마다 틱.
-export function advance(minutes) {
+export function advance(minutes, onMidnight = saveGame) {
   const t = G.time;
   let left = minutes;
   while (left > 0) {
@@ -52,13 +52,20 @@ export function advance(minutes) {
     const step = Math.min(left, toNext);
     t.min += step;
     left -= step;
-    if (t.min % TICK === 0) tick();
+    if (t.min % TICK === 0) tick(onMidnight);
   }
   emit("time");
 }
-export function skip(minutes) {
-  advance(minutes);
+export function skip(minutes, finishAction) {
+  const game = G;
+  let saveDue = false;
+  // 행동 중 자정을 넘겼다면 비용과 결과를 모두 반영한 뒤 한 번 저장한다.
+  advance(minutes, () => { saveDue = true; });
   emit("skip", minutes);
+  if (G !== game) return;
+  const result = finishAction?.();
+  if (saveDue && G === game) saveGame();
+  return result;
 }
 bindSkip(skip);
 
