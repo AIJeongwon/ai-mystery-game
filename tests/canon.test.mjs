@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { advance } from "../public/js/sim/clock.js";
 import { cd } from "../public/js/sim/world.js";
-import { resolveDecree, enact, retract, canonHourly } from "../public/js/sim/canon.js";
+import { resolveDecree, enact, plantCanon, retract, revertCanon, canonHourly } from "../public/js/sim/canon.js";
 import { commonSense } from "../public/js/sim/lore.js";
 import { decreeTargets } from "../public/js/llm/prompts.js";
 import { STAMP, INK_CAP } from "../public/js/data/progress.js";
@@ -48,6 +48,79 @@ test("기정: 각인 범위를 넘는 문장은 찍히지 않고, 유지 기간�
   canonHourly();
   assert.equal(cn.active, false, "기간이 지나면 문장이 바랜다");
   assert.equal(cn.ended.how, "fade");
+});
+
+test("의제 문장은 거두거나 환원할 때 관심도와 기울기까지 실제 적용량을 되돌린다", () => {
+  for (const undo of [retract, revertCanon]) {
+    const g = fresh(73);
+    const agenda = Object.values(g.world.agendas).find((entry) => !entry.resolved);
+    Object.assign(agenda, { progress: 98, momentum: 3.9, heat: 99 });
+    const cn = plantCanon({
+      id: "agenda_test", by: "rival", text: "의제의 향방이 달라졌다.",
+      effects: [{ kind: "agenda", id: agenda.id, attr: "progress", sign: 1, mag: 3 }],
+    });
+    assert.equal(agenda.progress, 99);
+    assert.equal(agenda.momentum, 4);
+    assert.equal(agenda.heat, 100);
+    undo(cn);
+    assert.equal(agenda.progress, 98);
+    assert.ok(Math.abs(agenda.momentum - 3.9) < 1e-9);
+    assert.equal(agenda.heat, 99);
+    undo(cn);
+    assert.equal(agenda.heat, 99, "같은 문장을 다시 취소해도 중복 반영하지 않는다");
+  }
+});
+
+test("플레이어가 찍은 의제 문장도 저장 왕복 후 실제 변화량을 되돌린다", () => {
+  const g = fresh(79);
+  const targets = decreeTargets(null);
+  const target = targets.find((entry) => entry.kind === "agenda");
+  const agenda = g.world.agendas[target.id.slice("agenda:".length)];
+  Object.assign(agenda, { progress: 99, momentum: 3.9, heat: 99 });
+  g.canon.lv.scope = 4;
+  g.canon.lv.power = 3;
+  g.canon.ink = 100;
+  const ap = resolveDecree("의제의 전망이 좋아졌다.", {
+    belief: "의제의 전망이 좋아졌다", valid: true, scope: "world", reaction: "",
+    effects: [{ target: `agenda:${agenda.id}`, attr: "progress", dir: "up", mag: 1 }],
+  }, targets, null);
+  assert.ok(ap.ok, ap.problems.join(" / "));
+  const original = enact(ap, { articleId: "agenda_article", title: "시험" });
+  const stored = JSON.parse(JSON.stringify(original));
+  retract(stored);
+  assert.equal(agenda.progress, 99, "진행도가 상한이어도 부수 효과는 취소한다");
+  assert.ok(Math.abs(agenda.momentum - 3.9) < 1e-9);
+  assert.equal(agenda.heat, 99);
+});
+
+test("변화량을 기록하기 전의 의제 문장도 취소할 때 관심도가 더 오르지 않는다", () => {
+  const g = fresh(83);
+  const agenda = Object.values(g.world.agendas).find((entry) => !entry.resolved);
+  Object.assign(agenda, { progress: 40, momentum: 0, heat: 30 });
+  const cn = plantCanon({
+    by: "rival", text: "기존 문장", effects: [{ kind: "agenda", id: agenda.id, attr: "progress", sign: 1, mag: 1 }],
+  });
+  delete cn.effects[0].heatApplied;
+  delete cn.effects[0].momentumApplied;
+  retract(cn);
+  assert.equal(agenda.progress, 40);
+  assert.equal(agenda.momentum, 0);
+  assert.equal(agenda.heat, 30);
+});
+
+test("문장 소멸은 의제의 실제 변화량 중 기존 규칙인 60퍼센트만 되돌린다", () => {
+  const g = fresh(89);
+  const agenda = Object.values(g.world.agendas).find((entry) => !entry.resolved);
+  Object.assign(agenda, { progress: 40, momentum: 0, heat: 30 });
+  const cn = plantCanon({
+    by: "rival", text: "사라질 문장", effects: [{ kind: "agenda", id: agenda.id, attr: "progress", sign: 1, mag: 1 }],
+  });
+  cn.expires = g.time.min;
+  canonHourly();
+  assert.equal(cn.active, false);
+  assert.ok(Math.abs(agenda.progress - 42.8) < 1e-9);
+  assert.ok(Math.abs(agenda.momentum - 0.2) < 1e-9);
+  assert.ok(Math.abs(agenda.heat - 32.4) < 1e-9);
 });
 
 // 알려진 문제(docs/roadmap/known-issues.md의 A-1): 인주 상한이 낮아 각 각인의 마지막 단계를 살 수 없다.

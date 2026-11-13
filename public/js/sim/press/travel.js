@@ -21,10 +21,11 @@ export function travelTo(dest) {
   const from = G.player.loc;
   G.player.travel = { from, to: dest, depart: now(), arrive: now() + info.mins };
   emit("travel:start", G.player.travel);
-  spend(info.mins);
-  G.player.loc = dest;
-  G.player.city = C(dest).cap;
-  G.player.travel = null;
-  emit("travel:end", dest, from);
-  return true;
+  return spend(info.mins, () => {
+    G.player.loc = dest;
+    G.player.city = C(dest).cap;
+    G.player.travel = null;
+    emit("travel:end", dest, from);
+    return true;
+  });
 }
