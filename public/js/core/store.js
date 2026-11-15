@@ -17,7 +17,7 @@ export function setG(g) {
 const SAVE_KEY = "gijeongsasil.save.v1";
 export const SAVE_VERSION = 1;
 
-export const blankDay = () => ({ ad: 0, sub: 0, plat: 0, etc: 0, rent: 0, pay: 0, bureau: 0, travel: 0, invest: 0, legal: 0, views: 0, newSubs: 0 });
+export const blankDay = () => ({ ad: 0, sub: 0, plat: 0, otherIncome: 0, etc: 0, rent: 0, pay: 0, bureau: 0, travel: 0, invest: 0, legal: 0, views: 0, newSubs: 0 });
 
 export function newGame({ reporter, outlet, skipPrologue = false, seed }) {
   const s = seed ?? (Date.now() & 0x7fffffff);
@@ -78,6 +78,32 @@ export function newGame({ reporter, outlet, skipPrologue = false, seed }) {
 }
 
 // ── 저장 ──
+// 같은 버전의 기본 필드는 확인하고, 플레이 도중 추가된 필드는 그대로 보존한다.
+const saveShape = newGame({ reporter: "", outlet: "", seed: 1 });
+
+function matchesSaveShape(value, shape) {
+  if (shape === null) return value === null || (typeof value === "object" && !Array.isArray(value));
+  if (Array.isArray(shape)) return Array.isArray(value);
+  if (typeof shape === "number") return Number.isFinite(value);
+  if (typeof shape !== "object") return typeof value === typeof shape;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(shape).every((key) => Object.hasOwn(value, key) && matchesSaveShape(value[key], shape[key]));
+}
+
+function readSave(text) {
+  let g;
+  try {
+    g = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  // 기존 1버전 세이브에는 기타 수입 항목이 없다.
+  const today = g?.outlet?.today;
+  if (today && typeof today === "object" && !Array.isArray(today) && !Object.hasOwn(today, "otherIncome")) today.otherIncome = 0;
+  if (g?.v === SAVE_VERSION && matchesSaveShape(g, saveShape)) return g;
+  return null;
+}
+
 export function saveGame() {
   if (!G || typeof localStorage === "undefined") return false;
   try {
@@ -100,7 +126,8 @@ export function peekSave() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
-    const g = JSON.parse(raw);
+    const g = readSave(raw);
+    if (!g) return null;
     return { outlet: g.meta.outlet, reporter: g.meta.reporter, min: g.time.min, tier: g.outlet.tier, ch: g.campaign.ch, v: g.v };
   } catch {
     return null;
@@ -109,8 +136,8 @@ export function peekSave() {
 export function loadGame() {
   const raw = localStorage.getItem(SAVE_KEY);
   if (!raw) return null;
-  const g = JSON.parse(raw);
-  if (g.v !== SAVE_VERSION) return null;
+  const g = readSave(raw);
+  if (!g) return null;
   g.time.speed = 0;
   return g;
 }
@@ -123,8 +150,8 @@ export function exportSave() {
   return JSON.stringify(G);
 }
 export function importSave(text) {
-  const g = JSON.parse(text);
-  if (!g || g.v !== SAVE_VERSION || !g.world || !g.outlet) throw new Error("세이브 형식이 맞지 않습니다");
+  const g = readSave(text);
+  if (!g) throw new Error("세이브 형식이 맞지 않습니다");
   localStorage.setItem(SAVE_KEY, JSON.stringify(g));
   return g;
 }

@@ -1,12 +1,82 @@
-# 오픈소스 소프트웨어 팀 프로젝트
+# 기정사실(記定事實)
+
+기자 경영 시뮬레이션 + 세계 개변 + 추리 캠페인. 브라우저에서 실행하는 2D 게임입니다.
+
+> 쓰는 대로, 세상은 그렇게 안다.
+
+1인 매체의 기자가 되어 세계지도 위의 사건을 취재하고, 기사를 직접 써서 발행합니다. 기사 속 한 문장에 **記定 도장**을 찍으면, 그 문장은 진실 여부와 상관없이 세상 모두가 원래부터 알던 상식이 됩니다. 캠페인은 프롤로그 「첫 문장」과 제1장 「이미 찍힌 문장」까지 있습니다.
+
+게임 속 인물·기업·기관·언론사와 사건은 모두 허구입니다.
+
+## 프로젝트 안내
 
 5인 팀의 게임 개발 저장소입니다. 중간 발표는 11월 13일, 최종 발표는 12월 4일입니다.
 
 팀원은 개인 포크에서 작업해 원본 저장소로 PR을 제출합니다. 원본 소유자가 변경을 검토하고 병합합니다.
 
-- [게임 기획](docs/game-design.md)
-- [사건 설계](docs/case-requirements.md)
-- [팀 일정](docs/team-plan.md)
-- [평가 기준](docs/evaluation.md)
-- [브랜치와 PR 운영](CONTRIBUTING.md)
-- [AI 협업 운영수칙](docs/ai-collaboration.md)
+## 실행
+
+Node.js 20.12 이상이 필요합니다.
+
+```bash
+npm install
+```
+
+```bash
+npm start
+```
+
+브라우저에서 <http://localhost:5173> 을 엽니다. Windows에서는 `start-game.bat`을 더블클릭해도 됩니다.
+
+- **API 키**: `.env.example`을 `.env`로 복사하고 `ANTHROPIC_API_KEY`를 채웁니다. 키는 서버만 읽고 브라우저로 전달되지 않습니다. `.env`는 저장소에 올리지 않습니다.
+- **키가 없어도 됩니다.** 키가 없거나 연결이 끊기면 규칙 모드로 플레이합니다(사건 서사·인터뷰·기사 판정이 단순해집니다).
+- LLM은 Claude Haiku 5.5, effort low 하나만 씁니다(서버에서 고정).
+- 조작: `Space` 일시정지 · `1` `2` `3` 속도 · 마우스 휠 확대/축소 · 끌어서 이동 · `Esc` 닫기. 자정마다 자동 저장됩니다.
+- 다른 사람과 함께 하는 방법은 [서버와 공유](docs/dev/server.md)에 있습니다.
+
+## 개발
+
+```bash
+npm run check
+```
+
+린트, 시험, 회귀 지문을 차례로 실행합니다. 고친 뒤와 PR을 올리기 전에 돌립니다. 각 검사가 잡는 것과 손으로 확인하는 범위는 [검증](docs/dev/testing.md)에 있습니다. 주소 뒤에 `?dev=1&skip=1`을 붙이면 타이틀과 프롤로그를 건너뜁니다.
+
+```
+server/          정적 파일 + Claude API 중계 (모델·effort 고정, 키 보관, 접속 보호)
+public/js/
+  core/          상태 저장소, 이벤트 버스, 유틸
+  data/          나라, 언론사, 행위자, 의제, 성장 체계, 사건 유형(events/)
+  sim/           규칙 엔진: 세계(world/), 취재·경영(press/), 記定, 경쟁사, 시계
+  llm/           API 클라이언트, 작업별 프롬프트(tasks/)
+  campaign/      캠페인 엔진, 장 등록, 장마다 폴더 하나
+  ui/            지도, HUD, 패널, 인터뷰, 편집국, 컷신
+tests/           규칙 엔진 시험, 콘텐츠 검사, 맞물림 검사
+tools/           회귀 지문, 밸런스 봇, 공유 실행과 점검, 에셋 가공
+```
+
+무엇을 더하려면 어디를 고치는지는 [기술 구조](docs/dev/architecture.md)에 있습니다.
+
+## 문서
+
+| 문서 | 내용 |
+|---|---|
+| [게임 기획](docs/game-design.md) | 개요, 핵심 루프, 시스템 요약, 용어 |
+| [사건 설계](docs/case-requirements.md) | 사건 유형과 캠페인 장을 쓸 때 정할 항목 |
+| [세계 시뮬레이션](docs/design/world.md) | 나라·행위자·의제·일정·사건·관심도 |
+| [취재와 기사](docs/design/reporting.md) | 취재 행동, 인터뷰, 기사 판정, 조회수와 신뢰도 |
+| [경영과 경쟁](docs/design/management.md) | 수익과 비용, 매체 등급, 인력·지국, 경쟁 언론사 |
+| [記定 시스템](docs/design/canon.md) | 도장의 규칙, 감정과 적용, 각인, 소멸·환원 |
+| [캠페인 시나리오](docs/design/campaign.md) | 프롤로그와 제1장의 줄거리·증거·추리 (**스포일러**) |
+| [LLM 연출](docs/design/llm.md) | LLM이 맡는 일 여섯 가지, 프롬프트 규칙, 규칙 기반 대안 |
+| [화면·아트·사운드](docs/design/presentation.md) | 화면 구성, 에셋, 소리, 글꼴 |
+| [기술 구조](docs/dev/architecture.md) | 폴더와 모듈, 게임 상태, 확장 방법 |
+| [서버와 공유](docs/dev/server.md) | 서버 API, 접속 코드와 한도, 공유 방법 |
+| [검증](docs/dev/testing.md) | 검사 명령, 시험 파일, 손으로 확인하는 범위 |
+| [Docker 구성과 배포](docs/dev/docker.md) | 컨테이너 구성과 서버 배포 설계안 (구현 전) |
+| [알려진 문제](docs/roadmap/known-issues.md) | 지금 있는 결함과 확인하지 못한 부분 |
+| [향후 개발 계획](docs/roadmap/plan.md) | 할 일의 순서, 제안, 정할 것 |
+| [팀 일정](docs/team-plan.md) · [평가 기준](docs/evaluation.md) | 발표 일정, 평가 항목과 확인 방법 |
+| [브랜치와 PR 운영](CONTRIBUTING.md) · [AI 협업 운영수칙](docs/ai-collaboration.md) · [AI 작업 규칙](AGENTS.md) | 협업 규칙 |
+
+수치와 규칙은 코드에서 옮겨 적었습니다. 문서와 코드가 다르면 코드가 맞습니다.

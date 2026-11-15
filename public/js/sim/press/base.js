@@ -3,9 +3,9 @@ import { G } from "../../core/store.js";
 import { TIERS } from "../../data/progress.js";
 
 // 시간 소모 (clock.skip이 주입된다)
-let skipFn = () => {};
+let skipFn = (_min, finishAction) => finishAction?.();
 export const bindSkip = (fn) => (skipFn = fn);
-export const spend = (min) => skipFn(Math.max(0, Math.round(min)));
+export const spend = (min, finishAction) => skipFn(Math.max(0, Math.round(min)), finishAction);
 
 export const upLv = (k) => G.outlet.upgrades[k] || 0;
 export const skill = (k) => G.player.skills[k] || 0;
