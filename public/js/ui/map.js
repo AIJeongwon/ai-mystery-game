@@ -1,7 +1,7 @@
 // 세계지도 — Canvas 2D. 국가 경로는 한 번만 투영해 Path2D로 보관하고, 이동·확대는 변환만 바꾼다.
 import { G } from "../core/store.js";
 import { emit, on } from "../core/bus.js";
-import { clamp, hash01, fmtPct } from "../core/util.js";
+import { clamp, hash01, fmtPct, escapeHtml } from "../core/util.js";
 import { COUNTRIES } from "../data/countries.js";
 import { CATS, OUTLETS, RIVAL_IDS, HOME } from "../data/world.js";
 import { STAGES } from "../data/templates.js";
@@ -667,11 +667,11 @@ function showTip(sx, sy, html) {
 function hideTip() {
   M.tip.classList.add("hidden");
 }
-function evTip(ev) {
+export function evTip(ev) {
   const c = COUNTRIES[ev.country];
-  return `<b>${ev.title}</b><span>${c.short} ${ev.city} · ${CATS[ev.cat].ko} · <em style="color:${STAGES[ev.stage].color}">${STAGES[ev.stage].ko}</em></span>`;
+  return `<b>${escapeHtml(ev.title)}</b><span>${c.short} ${escapeHtml(ev.city)} · ${CATS[ev.cat].ko} · <em style="color:${STAGES[ev.stage].color}">${STAGES[ev.stage].ko}</em></span>`;
 }
-function countryTip(feat) {
+export function countryTip(feat) {
   const d = cd(feat.key);
   const c = feat.c;
   let extra = "";
@@ -685,5 +685,5 @@ function countryTip(feat) {
   } else extra = `인구 ${c.pop >= 1 ? Math.round(c.pop).toLocaleString() + "백만" : (c.pop * 100).toFixed(0) + "만"} · 뉴스 독자 ${Math.round(audience(feat.key) / 1e4).toLocaleString()}만`;
   const p = presence(feat.key);
   const tag = p >= 3 ? " · 현재 위치" : feat.key === HOME ? " · 본사" : p === 2 ? " · 지국" : "";
-  return `<b>${c.ko}${tag}</b><span>${extra}</span>`;
+  return `<b>${escapeHtml(c.ko)}${tag}</b><span>${escapeHtml(extra)}</span>`;
 }

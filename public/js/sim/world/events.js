@@ -11,7 +11,7 @@ export function addEvent(seed, nar) {
   const T = EVENT_TYPES[seed.type];
   const t = now();
   const stage = seed.start ?? T.start;
-  const facts = (nar.facts || []).slice(0, 10).map((f, i) => ({ id: f.id || `f${i}`, text: cleanText(f.text, 300), depth: clamp(f.depth | 0, 0, 3), true: f.true !== false, ev: f.ev || null, cond: f.cond || null, talk: Boolean(f.cond || f.talk) }));
+  const facts = (nar.facts || []).slice(0, 10).map((f, i) => ({ id: f.id || `f${i}`, text: cleanText(f.text, 300), depth: clamp(f.depth | 0, 0, 3), true: f.true !== false, ev: f.ev || null, cond: f.cond || null, talk: Boolean(f.cond || f.talk), ...(f.disclosure ? { disclosure: f.disclosure } : {}) }));
   if (nar.rumor) facts.push({ id: "r0", text: cleanText(nar.rumor, 200), depth: 1, true: false });
   const factIds = new Set(facts.map((f) => f.id));
   const sources = (nar.sources || []).slice(0, 5).map((s, i) => ({

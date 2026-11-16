@@ -94,7 +94,7 @@ export function renderManage(el, ctx) {
     for (const [key, s] of Object.entries(SKILLS)) {
       const lv = p.skills[key];
       body.append(h("div.card", h("div.row.between", h("div.grow", h("div.nm", { style: { fontWeight: 700 } }, s.name, pips(lv, s.max)), h("div.muted", { style: { fontSize: "12px", lineHeight: 1.5 } }, s.desc), lv ? h("div", { style: { fontSize: "12px", color: "var(--green)" } }, s.eff(lv)) : null),
-        h("button.btn.small.gold", { disabled: !p.pts || lv >= s.max, onclick: () => { if (raiseSkill(key)) sfx("good"); } }, icon("plus", 14)))));
+        h("button.btn.small.gold", { disabled: s.available === false || !p.pts || lv >= s.max, onclick: () => { if (raiseSkill(key)) sfx("good"); } }, s.available === false ? "준비 중" : icon("plus", 14)))));
     }
   }
   mount(el, head("경영", `${G.meta.outlet} · ${tierDef().name}`),

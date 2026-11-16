@@ -3,9 +3,10 @@ import { emit } from "../core/bus.js";
 import { clamp, cleanText, sleep, pick } from "../core/util.js";
 import { h, mount, icon, chip, bar, modal, portraitUrl, toast } from "./dom.js";
 import { ask } from "../llm/api.js";
-import { npcRequest, npcUserTurn, trustGate } from "../llm/prompts.js";
+import { npcRequest, npcUserTurn } from "../llm/prompts.js";
 import { STANCE_KO, DEPTH_KO } from "../data/templates.js";
-import { notes, learnFact, initTrust, patience, spend } from "../sim/press.js";
+import { notes, learnFact, initTrust, patience, spend, disclosedFacts, acceptReply } from "../sim/press.js";
+import { CHAPTERS } from "../campaign/chapters.js";
 import { sfx } from "../audio.js";
 
 const DEFLECT = {
@@ -15,20 +16,19 @@ const DEFLECT = {
   hostile: ["공식 입장은 이미 밝혔습니다. 더 드릴 말씀이 없습니다.", "근거 없는 추측에는 답하지 않겠습니다."],
 };
 // LLM을 쓸 수 없을 때의 규칙 기반 응답
-function ruleReply(ev, src, sess, text) {
-  const nb = notes(ev.id);
-  const cands = [...src.knows, ...(src.lies || [])]
-    .map((id) => ev.facts.find((f) => f.id === id))
-    .filter((f) => f && !sess.said.has(f.id) && (src.lies?.includes(f.id) || trustGate(src, f.depth) <= sess.trust || sess.shown.length));
+export function ruleReply(ev, src, sess, text, context = { ...sess, text }) {
+  const cands = disclosedFacts(ev, src, context).filter((f) => !sess.said.has(f.id));
   const polite = /부탁|감사|죄송|익명|보호|힘드|걱정/.test(text);
   if (!cands.length) return { speech: pick(DEFLECT[src.stance] || DEFLECT.neutral), revealed: [], trust_delta: polite ? 1 : 0, end: sess.turn >= 3 };
   const f = cands.sort((a, b) => a.depth - b.depth)[0];
-  void nb;
   const lead = { friendly: "말씀드릴게요. ", neutral: "제가 아는 대로만 말하죠. ", evasive: "…이건 제가 말했다고 하지 마세요. ", hostile: "분명히 해 두죠. " }[src.stance] || "";
   return { speech: lead + f.text, revealed: [f.id], trust_delta: polite ? 1 : 0, end: false };
 }
 
 export function openInterview(ev, src, onsite, onDone) {
+  // 이전 저장에도 현재 각본의 조건을 적용하며 저장 파일의 조건으로 덮어쓰지 않는다.
+  const scene = Object.values(CHAPTERS).flatMap((ch) => ch.scenes || []).find((s) => s.id === ev.id);
+  const rules = Object.fromEntries((scene?.nar.facts || []).filter((f) => f.disclosure).map((f) => [f.id, f.disclosure]));
   const sess = {
     trust: initTrust(ev, src, onsite), left: Math.max(2, patience(src) - (src.turns || 0)), shown: [], busy: false, ended: false,
     said: new Set(), turn: 0, got: 0,
@@ -107,7 +107,7 @@ export function openInterview(ev, src, onsite, onDone) {
     api.setButtons([{ label: sess.got ? `마치기 · 사실 ${sess.got}건 확보` : "마치기", primary: true }]);
   }
 
-  async function exchange(turnText, display, opening = false) {
+  async function exchange(turnText, display, opening = false, question = "") {
     sess.busy = true;
     sendBtn.disabled = true;
     input.disabled = true;
@@ -117,13 +117,13 @@ export function openInterview(ev, src, onsite, onDone) {
     const history = src.log.slice(-18);
     while (history.length && history[0].role !== "user") history.shift();
     let data = null;
-    const r = await ask(npcRequest(ev, src, history, turnText));
-    if (r.ok && r.data && typeof r.data.speech === "string") data = r.data;
-    else data = opening ? { speech: pick(["무슨 일이시죠?", "기자라고요? …말씀하세요.", "네, 듣고 있습니다."]), revealed: [], trust_delta: 0, end: false } : ruleReply(ev, src, sess, display || "");
+    const context = { trust: sess.trust, text: question, said: new Set(sess.said), rules, opening };
+    const r = await ask(npcRequest(ev, src, history, turnText, context));
+    if (r.ok) data = acceptReply(ev, src, context, r.data);
+    if (!data) data = opening ? { speech: pick(["무슨 일이시죠?", "기자라고요? …말씀하세요.", "네, 듣고 있습니다."]), revealed: [], trust_delta: 0, end: false } : ruleReply(ev, src, sess, question, context);
     if (closed) return;
     const speech = cleanText(data.speech, 420) || "…";
-    const allowed = new Set([...src.knows, ...(src.lies || [])]);
-    const revealed = [...new Set((data.revealed || []).map((x) => String(x).replace(/[\[\]\s]/g, "")))].filter((id) => allowed.has(id));
+    const revealed = data.revealed;
     const fresh = [];
     for (const id of revealed) {
       sess.said.add(id);
@@ -175,7 +175,7 @@ export function openInterview(ev, src, onsite, onDone) {
     sfx("send");
     const shownTexts = sess.shown.map((id) => ev.facts.find((f) => f.id === id).text);
     const turn = npcUserTurn({ trust: sess.trust, onsite, text, shown: shownTexts });
-    exchange(turn, shownTexts.length ? `${text}\n(근거 제시: ${shownTexts.map((s) => s.slice(0, 30)).join(" / ")})` : text);
+    exchange(turn, shownTexts.length ? `${text}\n(근거 제시: ${shownTexts.map((s) => s.slice(0, 30)).join(" / ")})` : text, false, text);
   }
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {

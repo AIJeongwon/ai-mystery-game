@@ -43,7 +43,7 @@ public/js/
   sim/         규칙 엔진. 화면을 모름
                clock director chronicle rivals canon lore
     world/     query actors feed seeds narrative events schedule tick
-    press/     base notebook investigate trust travel money reach judge publish
+    press/     base notebook investigate trust disclosure travel money reach judge publish
                readership aftermath growth bureaus staff settlement draft
   llm/         api(호출, 재시도, 연결 상태, 접속 코드)  world-rules(모든 프롬프트의 세계 규칙)
     tasks/     작업별 스키마와 요청 조립. limits.js에 작업 목록과 출력 상한
