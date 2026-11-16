@@ -42,7 +42,7 @@ export const SKILLS = {
   research: { name: "취재력", max: 5, desc: "자료 조사에서 더 깊은 사실을 건진다.", eff: (lv) => `심층 단서 확률 +${lv * 7}%` },
   network: { name: "인맥", max: 5, desc: "소문 단계의 사건을 더 일찍, 더 멀리서 포착한다. 취재원의 첫 신뢰가 오른다.", eff: (lv) => `소문 포착 +${lv * 12}% · 초기 신뢰 +${lv * 4}` },
   mobility: { name: "기동력", max: 5, desc: "이동 시간과 출장비가 줄어든다.", eff: (lv) => `이동 시간·비용 -${lv * 10}%` },
-  sense: { name: "감식안", max: 5, desc: "찍힌 문장의 흔적(잔향)을 알아본다. 제1장 이후 쓸모가 생긴다.", eff: (lv) => `잔향 감지 범위 +${lv * 20}%` },
+  sense: { name: "감식안", max: 5, available: false, desc: "효과 준비 중. 현재 역량 점수를 사용할 수 없다.", eff: () => "효과 준비 중" },
 };
 export const XP_PER_LEVEL = (lv) => Math.round(60 * Math.pow(lv, 1.45));
 

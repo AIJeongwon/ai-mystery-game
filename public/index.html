@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기정사실(記定事實)</title>
+<link rel="icon" href="/assets/ui/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/vendor/pretendard/pretendardvariable-dynamic-subset.css">
+<link rel="stylesheet" href="/vendor/noto-serif-kr/400.css">
+<link rel="stylesheet" href="/vendor/noto-serif-kr/700.css">
+<link rel="stylesheet" href="/vendor/noto-serif-kr/900.css">
+<link rel="stylesheet" href="/css/main.css">
+<link rel="stylesheet" href="/css/scenes.css">
+</head>
+<body>
+<div id="app">
+  <!-- 타이틀 -->
+  <section id="screen-title" class="screen"></section>
+
+  <!-- 게임 -->
+  <section id="screen-game" class="screen hidden">
+    <div id="map">
+      <canvas id="map-base"></canvas>
+      <canvas id="map-fx"></canvas>
+      <div id="map-tip" class="map-tip hidden"></div>
+    </div>
+    <header id="hud"></header>
+    <nav id="dock"></nav>
+    <aside id="drawer" class="hidden"></aside>
+    <aside id="side"></aside>
+    <div id="objective" class="hidden"></div>
+    <div id="mapbar"></div>
+    <div id="travel-banner" class="hidden"></div>
+  </section>
+
+  <div id="modal-root"></div>
+  <div id="cutscene" class="hidden"></div>
+  <div id="fx-root"></div>
+  <div id="toasts"></div>
+  <div id="boot">
+    <div class="boot-seal">記定</div>
+    <div class="boot-text">불러오는 중…</div>
+  </div>
+</div>
+<script src="/vendor/d3.min.js"></script>
+<script src="/vendor/topojson-client.min.js"></script>
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>

@@ -5,6 +5,8 @@ import { commonSense } from "../../sim/lore.js";
 import { S } from "../api.js";
 import { WORLD_RULES_TEXT } from "../world-rules.js";
 import { TASK_LIMITS } from "./limits.js";
+import { disclosedFacts, trustGate } from "../../sim/press.js";
+export { trustGate };
 
 export const NPC_SCHEMA = S.obj({
   speech: S.str("인물의 대사만. 지문·따옴표 없이"),
@@ -19,25 +21,18 @@ const STANCE_DESC = {
   evasive: "말을 아끼고 빠져나가려 한다. 믿음이 생기기 전에는 핵심을 피한다.",
   hostile: "방어적이다. 자기 쪽에 불리한 것은 인정하지 않고 공식 입장만 되풀이한다.",
 };
-export function trustGate(src, depth) {
-  const base = [0, 25, 50, 70][depth] ?? 70;
-  const adj = { friendly: -10, neutral: 0, evasive: 5, hostile: 15 }[src.stance] ?? 0;
-  return Math.max(0, base + adj);
-}
-
-export function npcSystem(ev, src) {
+export function npcSystem(ev, src, context = {}) {
   const sense = commonSense(ev.country, ev.id);
+  const allowed = new Set(disclosedFacts(ev, src, context).map((f) => f.id));
   const factLines = [];
   for (const id of src.knows) {
     const f = ev.facts.find((x) => x.id === id);
-    if (!f) continue;
-    const gate = trustGate(src, f.depth);
-    const cond = f.cond ? f.cond : gate <= 0 ? "물으면 바로 말한다" : `신뢰도 ${gate} 이상일 때, 또는 기자가 이와 관련된 근거를 제시했을 때만 말한다`;
-    factLines.push(`- [${id}] (${cond}) ${f.text}`);
+    if (!f || !allowed.has(id)) continue;
+    factLines.push(`- [${id}] ${f.text}`);
   }
   for (const id of src.lies || []) {
     const f = ev.facts.find((x) => x.id === id);
-    if (f) factLines.push(`- [${id}] (당신은 이 말이 사실이라고 믿거나, 자기에게 유리해서 퍼뜨린다. 기회가 오면 사실처럼 말한다) ${f.text}`);
+    if (f && allowed.has(id)) factLines.push(`- [${id}] (당신은 이 말이 사실이라고 믿거나, 자기에게 유리해서 퍼뜨린다. 기회가 오면 사실처럼 말한다) ${f.text}`);
   }
   const ageKo = src.age === "old" ? "50~60대" : "20~30대";
   return `당신은 뉴스 게임 「기정사실」 속 인물을 연기한다. 아래 인물이 되어, 찾아온 기자의 질문에 답한다.
@@ -48,14 +43,13 @@ ${WORLD_RULES_TEXT}
 사는 곳: ${cfull(ev.country)} ${ev.city}
 성격과 말투: ${src.persona}
 기자를 대하는 태도: ${STANCE_DESC[src.stance]}
-남에게 숨기는 사정: ${src.secret || "없음"}
 
 [지금 벌어진 일]
 ${ev.title} — ${ev.summary}
 ${sense.length ? `\n[세상의 상식] 당신을 포함해 세상 모두가 원래부터 당연한 사실로 알고 있는 것. 당신은 이것을 한 번도 의심한 적이 없고, 언제부터 알았는지도 굳이 따져 본 적 없다:\n${sense.map((s) => `- ${s}`).join("\n")}\n` : ""}
 [당신이 아는 것]
 ${factLines.join("\n") || "- (공개된 개요 말고는 아는 것이 없다)"}
-${src.script ? `\n[연기 지침]\n${src.script}\n` : ""}
+${src.script && src.knows.every((id) => allowed.has(id)) ? `\n[연기 지침]\n${src.script}\n` : ""}
 [대화 규칙]
 - 한국어 구어체로 1~3문장만 말한다. 인물의 말투와 감정을 유지한다.
 - 기자가 묻는 것에만 답한다. 한 번에 새 사실은 많아야 한두 가지. 아는 것을 한꺼번에 쏟아내지 않는다.
@@ -75,9 +69,9 @@ export function npcUserTurn({ trust, onsite, text, shown, opening }) {
   return `${head}${ev}\n기자: ${text}`;
 }
 
-export function npcRequest(ev, src, history, turn) {
+export function npcRequest(ev, src, history, turn, context = {}) {
   const messages = [];
   for (const h of history) messages.push({ role: h.role, content: h.content });
   messages.push({ role: "user", content: turn });
-  return { task: "npc", system: npcSystem(ev, src), messages, schema: NPC_SCHEMA, maxTokens: TASK_LIMITS.npc, thinking: false, cache: true, timeoutMs: 40000 };
+  return { task: "npc", system: npcSystem(ev, src, context), messages, schema: NPC_SCHEMA, maxTokens: TASK_LIMITS.npc, thinking: false, cache: true, timeoutMs: 40000 };
 }

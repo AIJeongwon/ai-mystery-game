@@ -14,8 +14,8 @@ export async function handleHealth(req, res) {
       share: { codeSet, limits: LIMITS, usage: await usageSnapshot() },
     });
   }
-  // 원격: 코드 확인 결과만 알려 준다 (통계·한도는 내보내지 않는다)
-  const auth = checkCode(req, who.ip);
+  // 상태 조회는 시도 횟수와 잠금을 바꾸지 않는다. 실제 LLM 요청에서만 횟수를 센다.
+  const auth = checkCode(req, who.ip, { countAttempt: false });
   const state = await clientState(who.ip);
   let reason = auth.ok ? null : auth.reason;
   if (auth.ok && state.budget) reason = "budget";

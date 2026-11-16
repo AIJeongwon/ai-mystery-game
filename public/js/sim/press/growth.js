@@ -20,7 +20,8 @@ export function gainXp(n) {
 }
 export function raiseSkill(key) {
   const p = G.player;
-  if (p.pts <= 0 || p.skills[key] >= SKILLS[key].max) return false;
+  const def = SKILLS[key];
+  if (!def || def.available === false || p.pts <= 0 || p.skills[key] >= def.max) return false;
   p.pts--;
   p.skills[key]++;
   emit("skill", key);
