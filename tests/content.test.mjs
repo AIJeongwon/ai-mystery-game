@@ -19,9 +19,7 @@ const between = (v, lo, hi) => Number.isFinite(v) && v >= lo && v <= hi;
 const PLACEHOLDERS = new Set(["actor", "org", "city", "country", "n1", "n2", "p1", "p2", "p3"]);
 const badPlaceholders = (text) => [...String(text).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => !PLACEHOLDERS.has(k));
 // 사건이 종결될 때 엔진(sim/world/events.js의 closeEvent)이 실제로 반영하는 영향 항목
-const IMPACT_APPLIED = ["stab", "appr", "econ", "tens", "rep"];
-// 데이터에는 적혀 있지만 엔진이 아직 읽지 않는 항목 (알려진 문제: docs/roadmap/known-issues.md의 A-18)
-const IMPACT_PENDING = ["attn", "press"];
+const IMPACT_APPLIED = ["stab", "appr", "econ", "tens", "rep", "attn", "press"];
 // 가중치 함수에 넘어가는 것과 같은 모양(나라의 고정 값 + 움직이는 값)
 const sample = (id) => ({ ...COUNTRIES[id], stab: COUNTRIES[id].stab, appr: 46, econ: 50, tens: 20, attn: 30 });
 
@@ -35,7 +33,7 @@ test("사건 유형: 형식과 규칙 서사 틀", () => {
     assert.ok(Array.isArray(t.dur) && t.dur.length === 4 && t.dur.every((h) => h > 0), `${key}: 국면별 지속 시간 넷이 있어야 한다`);
     assert.ok([undefined, "gov", "corp"].includes(t.actor), `${key}: actor는 gov나 corp여야 한다`);
     for (const id of ["410", "840", "404"]) assert.ok(between(t.w(sample(id)), 0, 100), `${key}: 가중치 함수가 ${id}에서 올바른 수를 내지 않는다`);
-    for (const k of Object.keys(t.impact)) assert.ok(IMPACT_APPLIED.includes(k) || IMPACT_PENDING.includes(k), `${key}: 모르는 영향 항목 ${k}`);
+    for (const k of Object.keys(t.impact)) assert.ok(IMPACT_APPLIED.includes(k), `${key}: 모르는 영향 항목 ${k}`);
     assert.ok(typeof t.hint === "string" && t.hint.length > 10, `${key}: LLM 지침(hint)이 없다`);
     if (t.out) assert.ok(t.out.length === 2 && t.out.every((s) => typeof s === "string" && s), `${key}: 결말 문구는 둘이어야 한다`);
     // 규칙 서사 틀: LLM이 없을 때 이것으로 사건을 만든다
@@ -59,9 +57,8 @@ test("사건 유형: 형식과 규칙 서사 틀", () => {
   assert.equal(SIG_LABEL.length, 6);
 });
 
-// 알려진 문제(docs/roadmap/known-issues.md의 A-18): 여덟 유형이 엔진이 읽지 않는 영향 항목(attn, press)을 갖고 있어, 종결돼도 그 영향이 세계에 반영되지 않는다.
-// 엔진에 구현하거나 데이터에서 지우면 todo 표시를 뗀다.
-test("사건 유형: 적어 둔 영향 항목을 엔진이 모두 반영한다", { todo: "알려진 문제 A-18 — attn·press 영향이 구현돼 있지 않다" }, () => {
+// 처리 항목과 사건 데이터의 일치를 확인하고 실제 변화는 event-impact.test.mjs에서 검사한다.
+test("사건 유형: 적어 둔 영향 항목을 엔진이 모두 반영한다", () => {
   const pending = Object.entries(EVENT_TYPES).flatMap(([key, t]) => Object.keys(t.impact).filter((k) => !IMPACT_APPLIED.includes(k)).map((k) => `${key}.${k}`));
   assert.deepEqual(pending, []);
 });

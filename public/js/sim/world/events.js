@@ -3,7 +3,7 @@ import { G } from "../../core/store.js";
 import { emit } from "../../core/bus.js";
 import { clamp, rand, chance, uid, HOUR, cleanText } from "../../core/util.js";
 import { EVENT_TYPES } from "../../data/templates.js";
-import { cd, now, actor, presence, portraitFor } from "./query.js";
+import { cd, now, actor, presence, portraitFor, pressFreedom } from "./query.js";
 import { feed } from "./feed.js";
 
 // ───────── 사건 생성 ─────────
@@ -104,6 +104,8 @@ export function closeEvent(ev, forced) {
     if (imp.appr) d.appr = clamp(d.appr + imp.appr * 5 * mul, 3, 95);
     if (imp.econ) d.econ = clamp(d.econ + imp.econ * 4 * mul, 3, 98);
     if (imp.tens) d.tens = clamp(d.tens + imp.tens * 5 * mul, 0, 100);
+    if (imp.attn) d.attn = clamp(d.attn + imp.attn * 7 * mul, 0, 100);
+    if (imp.press) d.press = clamp(pressFreedom(ev.country) + imp.press * 5 * mul, 0, 100);
   }
   const a = ev.actor && actor(ev.actor);
   if (a && imp.rep) a.rep = clamp(a.rep + imp.rep * 7 * mul, 2, 98);

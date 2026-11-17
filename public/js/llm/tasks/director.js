@@ -3,7 +3,7 @@ import { G } from "../../core/store.js";
 import { fmtDate } from "../../core/util.js";
 import { CATS } from "../../data/world.js";
 import { EVENT_TYPES, SIG_LABEL } from "../../data/templates.js";
-import { C, cd, cfull, actor, regionName } from "../../sim/world.js";
+import { cd, cfull, actor, regionName, pressFreedom } from "../../sim/world.js";
 import { commonSense } from "../../sim/lore.js";
 import { S } from "../api.js";
 import { WORLD_RULES_TEXT } from "../world-rules.js";
@@ -28,7 +28,6 @@ export const DIRECTOR_SCHEMA = S.obj({
 
 export function directorRequest(seed) {
   const T = EVENT_TYPES[seed.type];
-  const c = C(seed.country);
   const d = cd(seed.country);
   const act = seed.actor ? actor(seed.actor) : null;
   const ag = seed.agenda ? G.world.agendas[seed.agenda] : null;
@@ -53,7 +52,7 @@ ${WORLD_RULES_TEXT}
     `장소: ${cfull(seed.country)} ${seed.city} · ${regionName(seed.country)}`,
     `규모: ${SIG_LABEL[seed.sig]} 수준의 뉴스 (1 지역 ~ 5 세계적 중 ${seed.sig})`,
     `시점: ${fmtDate(G.time.min, { dateOnly: true })}`,
-    `그 나라 사정: 정치 안정 ${Math.round(d.stab)}/100, 정부 지지 ${Math.round(d.appr)}/100, 경기 ${Math.round(d.econ)}/100, 언론 자유 ${c.press}/100`,
+    `그 나라 사정: 정치 안정 ${Math.round(d.stab)}/100, 정부 지지 ${Math.round(d.appr)}/100, 경기 ${Math.round(d.econ)}/100, 언론 자유 ${Math.round(pressFreedom(seed.country))}/100`,
   ];
   if (act) lines.push(`반드시 등장시킬 행위자: ${act.name} (${act.role})`);
   if (ag) lines.push(`연관 의제: 「${ag.title}」 — ${ag.desc} (쟁점의 양쪽: ${ag.poles[0]} / ${ag.poles[1]})`);

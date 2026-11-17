@@ -6,6 +6,8 @@ import { CATS, HOME, OUTLETS, NAME_POOLS, CULTURE_BY_COUNTRY, CULTURE_BY_REGION,
 
 export const C = (id) => COUNTRIES[id];
 export const cd = (id) => G.world.c[id];
+// 기존 저장에는 언론 자유의 변화값이 없으므로 나라의 초기값을 읽는다.
+export const pressFreedom = (id) => cd(id)?.press ?? C(id)?.press;
 export const cname = (id) => COUNTRIES[id]?.short || COUNTRIES[id]?.ko || "?";
 export const cfull = (id) => COUNTRIES[id]?.ko || "?";
 export const now = () => G.time.min;
