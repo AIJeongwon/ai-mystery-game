@@ -100,8 +100,10 @@ function readSave(text) {
   // 기존 1버전 세이브에는 기타 수입 항목이 없다.
   const today = g?.outlet?.today;
   if (today && typeof today === "object" && !Array.isArray(today) && !Object.hasOwn(today, "otherIncome")) today.otherIncome = 0;
-  if (g?.v === SAVE_VERSION && matchesSaveShape(g, saveShape)) return g;
-  return null;
+  if (g?.v !== SAVE_VERSION || !matchesSaveShape(g, saveShape)) return null;
+  // 언론 자유가 추가된 저장도 읽되 잘못된 선택 필드는 기존 기록에 반영하지 않는다.
+  if (Object.values(g.world.c).some((d) => d?.press !== undefined && (!Number.isFinite(d.press) || d.press < 0 || d.press > 100))) return null;
+  return g;
 }
 
 export function saveGame() {

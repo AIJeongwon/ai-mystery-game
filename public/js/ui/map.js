@@ -5,7 +5,7 @@ import { clamp, hash01, fmtPct, escapeHtml } from "../core/util.js";
 import { COUNTRIES } from "../data/countries.js";
 import { CATS, OUTLETS, RIVAL_IDS, HOME } from "../data/world.js";
 import { STAGES } from "../data/templates.js";
-import { cd, knownEvents, presence, audience } from "../sim/world.js";
+import { cd, knownEvents, presence, audience, pressFreedom } from "../sim/world.js";
 
 const d3 = window.d3;
 const topojson = window.topojson;
@@ -87,6 +87,7 @@ export function initMap() {
     window.addEventListener("resize", resize);
     bindInput();
     on("hour", () => (M.dirty = true));
+    on("event:closed", () => (M.dirty = true));
     on("bureau", () => (M.dirty = true));
     on("travel:end", () => (M.dirty = true));
   }
@@ -160,7 +161,7 @@ function countryFill(feat) {
   switch (M.mode) {
     case "attn": return RAMPS.attn(d.attn);
     case "stab": return RAMPS.stab(d.stab);
-    case "press": return RAMPS.press(c.press);
+    case "press": return RAMPS.press(pressFreedom(feat.key));
     case "mine": return RAMPS.mine(d.my);
     case "share": {
       let top = null, tv = 0.012;
@@ -677,7 +678,7 @@ export function countryTip(feat) {
   let extra = "";
   if (M.mode === "attn") extra = `세계의 관심 ${Math.round(d.attn)}`;
   else if (M.mode === "stab") extra = `정치 안정 ${Math.round(d.stab)} · 정부 지지 ${Math.round(d.appr)}`;
-  else if (M.mode === "press") extra = `언론 자유 ${c.press}`;
+  else if (M.mode === "press") extra = `언론 자유 ${Math.round(pressFreedom(feat.key))}`;
   else if (M.mode === "mine") extra = `내 독자 ${fmtPct(d.my, 3)}`;
   else if (M.mode === "share") {
     const top = Object.entries({ player: d.my, ...d.share }).sort((a, b) => b[1] - a[1])[0];

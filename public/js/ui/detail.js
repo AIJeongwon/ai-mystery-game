@@ -6,7 +6,7 @@ import { h, $, mount, icon, chip, bar, toast, confirmDialog, portraitUrl } from 
 import { REGIONS } from "../data/countries.js";
 import { CATS, OUTLETS, RIVAL_IDS, HOME } from "../data/world.js";
 import { STAGES, SIG_LABEL, STANCE_KO, DEPTH_KO } from "../data/templates.js";
-import { C, cd, cname, cfull, audience, presence, playerHere, actorsOf, agendasOf, knownEvents, outletName, actor } from "../sim/world.js";
+import { C, cd, cname, cfull, audience, presence, playerHere, actorsOf, agendasOf, knownEvents, outletName, actor, pressFreedom } from "../sim/world.js";
 import {
   notes, factSummary, deskResearch, fieldWork, canField, digInfo, deepDig, travelInfo, travelTo,
   canOpenBureau, openBureau, bureauCost,
@@ -234,7 +234,7 @@ function renderCountry(id) {
   const body = h("div.panel-body",
     h("div.sect", h("h4", "나라 사정"),
       statRow("정치 안정", d.stab, "teal"), statRow("정부 지지", d.appr, "green"), statRow("경기", d.econ, "gold"),
-      statRow("대외 긴장", d.tens, "red"), statRow("언론 자유", c.press, "violet"), statRow("세계의 관심", d.attn, "amber")),
+      statRow("대외 긴장", d.tens, "red"), statRow("언론 자유", pressFreedom(id), "violet"), statRow("세계의 관심", d.attn, "amber")),
     h("div.sect", h("h4", "언론 판도"),
       shares.length ? shares.map(([oid, s]) => h("div", { style: { display: "grid", gridTemplateColumns: "92px 1fr 52px", gap: "8px", alignItems: "center", fontSize: "12.5px" } },
         h("span", { style: { color: oid === "player" ? "var(--red)" : OUTLETS[oid].color, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, outletName(oid)),
@@ -346,7 +346,7 @@ export function bindDetail() {
   on("fact:new", (ev, f) => side.fresh.add(ev.id + f.id));
   on("fact:up", (ev, f) => side.fresh.add(ev.id + f.id));
   on("event:stage", (ev) => side.mode === "event" && side.id === ev.id && render());
-  on("event:closed", (ev) => side.mode === "event" && side.id === ev.id && render());
+  on("event:closed", (ev) => ((side.mode === "event" && side.id === ev.id) || (side.mode === "country" && side.id === ev.country)) && render());
   on("event:dev", (ev) => side.mode === "event" && side.id === ev.id && render());
   on("article:published", () => side.mode !== "feed" && render());
 }

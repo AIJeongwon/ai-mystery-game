@@ -16,7 +16,7 @@
 | `fb` | LLM이 없을 때 쓰는 규칙 서사 틀. 제목, 개요, 사실 4개 이상(`[깊이, 글]`. 깊이 0과 2 이상이 모두 있어야 함), 거짓 소문, 취재원 2명 이상(`[직함, 태도, 아는 사실 번호, 성격]`) |
 
 - `fb`의 글에는 치환자 `{actor}` `{org}` `{city}` `{country}` `{n1}` `{n2}` `{p1}` `{p2}` `{p3}`만 씁니다. 실존 인물·기업의 이름은 쓰지 않습니다.
-- `impact`는 지금 `stab`·`appr`·`econ`·`tens`·`rep`만 세계에 반영됩니다([알려진 문제](roadmap/known-issues.md) A-18). 일정표에 잡히는 유형이면 `data/agendas.js`의 `SCHEDULE_KINDS`에도 넣습니다.
+- `impact`는 `stab`·`appr`·`econ`·`tens`·`rep`·`attn`·`press`를 세계에 반영합니다. 관심도는 단위 7, 언론 자유는 단위 5이며 결말 배수를 곱합니다. 일정표에 잡히는 유형이면 `data/agendas.js`의 `SCHEDULE_KINDS`에도 넣습니다.
 - 파일 안의 항목 순서와 `index.js`가 펼치는 순서가 무작위 뽑기의 순서입니다. 유형을 더하면 회귀 지문이 달라지는 것이 정상이고, 그때는 `node tools/regression.mjs --update`로 기준선을 새로 적습니다.
 
 ## 캠페인 장
