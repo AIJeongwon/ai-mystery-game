@@ -12,6 +12,12 @@ server/usage.json
 tools/_raw/
 tools/bin/
 
+# 3D 에셋은 당분간 각자 로컬에 둔다 (블록아웃·사실화 glb, 소품, 인물)
+public/assets/3d/
+
 # 운영체제가 만드는 파일
 .DS_Store
 Thumbs.db
+
+# Blender 스크립트를 Python으로 돌릴 때 생기는 파일
+__pycache__/
