@@ -23,6 +23,12 @@ const MIME = {
   ".mp3": "audio/mpeg",
   ".ogg": "audio/ogg",
   ".wav": "audio/wav",
+  ".glb": "model/gltf-binary",
+  ".gltf": "model/gltf+json",
+  ".bin": "application/octet-stream",
+  ".ktx2": "image/ktx2",
+  ".hdr": "application/octet-stream",
+  ".wasm": "application/wasm",
 };
 const COMPRESSIBLE = new Set([".html", ".js", ".mjs", ".css", ".json", ".svg"]);
 
@@ -33,6 +39,9 @@ const VENDOR = [
   ["/vendor/world-50m.json", path.join(NM, "world-atlas", "countries-50m.json")],
   ["/vendor/pretendard/", path.join(NM, "pretendard", "dist", "web", "variable") + path.sep],
   ["/vendor/noto-serif-kr/", path.join(NM, "@fontsource", "noto-serif-kr") + path.sep],
+  // 3D 현장: three.js 본체와 로더 (site.html의 importmap이 가리킨다)
+  ["/vendor/three/build/", path.join(NM, "three", "build") + path.sep],
+  ["/vendor/three/addons/", path.join(NM, "three", "examples", "jsm") + path.sep],
 ];
 
 function resolveStatic(urlPath) {
