@@ -365,6 +365,9 @@ const MATH = {
   find: { gives: "I11", q: 14, option: 3 },
 };
 
+// 프롤로그의 노트북이 같은 누리집을 쓴다 (data/sites/prologue.js)
+export const DESK_WEB = WEB, DESK_MATH = MATH;
+
 export const MOKWON_DESK = {
   id: "mokwon_desk",
   kind: "desk",

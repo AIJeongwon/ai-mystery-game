@@ -83,7 +83,7 @@ export function openTalk({ root, def, st, npc, hud, onGain, onSpeak }) {
   }
 
   async function reply(text, shown) {
-    const ctx = { trust: me.trust, shown, text, evidence: st.evidence, said: me.said, turn: me.turns };
+    const ctx = { trust: me.trust, shown, text, evidence: st.evidence, flags: st.flags, said: me.said, turn: me.turns };
     const facts = sayable(npc, ctx);
     let out = null;
     if (llm.online) {
@@ -114,7 +114,12 @@ export function openTalk({ root, def, st, npc, hud, onGain, onSpeak }) {
     entry.a = out.speech;
     entry.revealed = out.revealed;
     me.turns++;
-    for (const id of out.revealed) if (!me.said.includes(id)) me.said.push(id);
+    for (const id of out.revealed) {
+      if (me.said.includes(id)) continue;
+      me.said.push(id);
+      const effect = npc.facts.find((f) => f.id === id)?.effect; // 말이 일을 일으킨다 (문을 열어 주기로 한다)
+      if (effect) onGain(effect);
+    }
     me.trust = clamp(me.trust + out.trust_delta * 4, 0, 100);
     me.log.push(entry);
     me.chat.push({ role: "user", content: siteNpcTurn(def, { trust: me.trust, text: text || q, shown }) }, { role: "assistant", content: JSON.stringify({ speech: out.speech, revealed: out.revealed, trust_delta: out.trust_delta, end: false }) });

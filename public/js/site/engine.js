@@ -5,10 +5,10 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { newSiteState, loadSite, saveSite, clearSite, lockOpen, spotStatus, useSpot, apply, nodeVisible, currentQuestion, questionProgress, runDeadlines, fmtClock, hourOf, daylight } from "./state.js";
+import { newSiteState, loadSite, saveSite, clearSite, saveKeyOf, lockOpen, spotStatus, useSpot, apply, nodeVisible, currentQuestion, questionProgress, runDeadlines, fmtClock, hourOf, daylight, travelTo } from "./state.js";
 import { makeNav, step, findPath, setBoxEnabled } from "./nav.js";
 import { makeMarker } from "./markers.js";
-import { makeHud, choose } from "./hud.js";
+import { el, makeHud, choose } from "./hud.js";
 import { openInspect } from "./inspect.js";
 import { buildProp } from "./props.js";
 import { loadNpc } from "./npc.js";
@@ -17,6 +17,12 @@ import { startAmbience } from "./ambience.js";
 import { openNotebook } from "./notebook.js";
 import { openBoard } from "./board.js";
 import { primeBook, bookUnseen, boardUnseen } from "./reason.js";
+import { probeOf, probeStatus, probeOpen } from "./records.js";
+import { openWeb } from "./probe-web.js";
+import { openLedger } from "./probe-ledger.js";
+import { openFlow } from "./probe-flow.js";
+import { openAnswers } from "./probe-answers.js";
+import { openTravel } from "./travel.js";
 import { loadPhotos, savePhotos, clearPhotos, shrink } from "./photos.js";
 import { sfx } from "./sfx.js";
 
@@ -24,9 +30,11 @@ const EYE = 1.6, WALK = 2.1, RUN = 3.4, REACH = 1.6, PITCH_MAX = 1.48;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+const PROBES = { web: openWeb, ledger: openLedger, flow: openFlow, answers: openAnswers };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function loadModel(loader, def, opts) {
-  const tries = opts.blockout ? [def.blockout] : [def.model, def.blockout];
+  const tries = (opts.blockout ? [def.blockout] : [def.model, def.blockout]).filter(Boolean); // 사실화 전의 장소는 model이 비어 있다
   for (const url of tries) {
     try {
       return { gltf: await loader.loadAsync(url), url };
@@ -41,8 +49,17 @@ export async function createSite(root, def, opts = {}) {
   const saved = !opts.fresh && loadSite(def);
   const st = saved || newSiteState(def);
   // 기자가 찍은 사진 (증거판의 카드에 붙는다). 처음부터 다시 하면 사진도 지운다.
-  const photos = saved ? loadPhotos(def.id) : {};
-  if (!saved) clearPhotos(def.id);
+  const saveKey = saveKeyOf(def);
+  const photos = saved ? loadPhotos(saveKey) : {};
+  if (!saved) clearPhotos(saveKey);
+  // 여러 장소를 오가는 사건: 지금 어디에 있고, 이곳이 처음인지, 방금 어디서 왔는지
+  st.at = def.id;
+  st.visits ||= {};
+  const firstVisit = !st.visits[def.id] && !(saved && !def.save && Object.keys(st.seen).length); // 예전 저장에는 visits가 없다: 살펴본 것이 있으면 와 본 곳이다
+  st.visits[def.id] = (st.visits[def.id] || 0) + 1;
+  const arrived = st.arrived || null;
+  delete st.arrived;
+  const spawnName = (saved && def.arrive) || def.start.spawn;
   const canvas = document.createElement("canvas");
   canvas.className = "s-canvas";
   root.append(canvas);
@@ -92,7 +109,7 @@ export async function createSite(root, def, opts = {}) {
   level.traverse((o) => {
     if (o.name && !(o.name in nodes)) nodes[o.name] = o;
     if (o.isMesh) {
-      o.castShadow = !/^(glass|window|lamp|trace|hole|tile|sky|decal|plenum)/.test(o.name) && !o.material?.transparent;
+      o.castShadow = !/^(glass|window|lamp|trace|hole|tile|sky|decal|plenum)|glass/.test(o.name) && !o.material?.transparent;
       o.receiveShadow = true;
     }
   });
@@ -178,12 +195,12 @@ export async function createSite(root, def, opts = {}) {
       t.anisotropy = 4;
       return t;
     }));
-    const gain = ["lamp", "sky", "sun"].map((k) => Math.PI * LM.maps[k].range); // 구운 값(반사 밝기)을 받는 빛으로 되돌린다
+    const gain = ["lamp", "sky", "sun"].map((k) => Math.PI * LM.maps[k].range * (LM.maps[k].gain ?? 1)); // 구운 값(반사 밝기)을 받는 빛으로 되돌린다
     const U = { lmSky: { value: tex[1] }, lmSun: { value: tex[2] }, lmMix: { value: new THREE.Vector3(gain[0], gain[1], gain[2]) } };
     const chunk = THREE.ShaderChunk.lights_fragment_maps.replace(
       "vec3 lightMapIrradiance = lightMapTexel.rgb * lightMapIntensity;",
       "vec3 lightMapIrradiance = lightMapTexel.rgb * lmMix.x + texture2D( lmSky, vLightMapUv ).rgb * lmMix.y + texture2D( lmSun, vLightMapUv ).rgb * lmMix.z;");
-    const lit = new Set(), free = new Set();
+    const lit = new Set();
     for (const name of LM.meshes) nodes[name]?.traverse((o) => o.isMesh && [].concat(o.material).forEach((m) => lit.add(m)));
     for (const m of lit) {
       m.lightMap = tex[0];
@@ -197,29 +214,46 @@ export async function createSite(root, def, opts = {}) {
     }
     const glass = new THREE.MeshStandardMaterial({ color: 0xdfeef5, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.14, depthWrite: false });
     const dim = /^(hole|plenum)/; // 천장 속은 어둡다
+    // 가구와 인물이 받을 빛을 찍는 자리. 안과 밖이 함께 있는 장소는 구역마다 하나씩 둔다:
+    // 첫째가 기본(상자 없음)이고, 나머지는 바닥면의 상자 [minX, minZ, maxX, maxZ] 안에 든 것을 맡는다.
+    const probes = (LM.probes?.length ? LM.probes : [{ at: [center.x, 1.4, center.z] }]).map((q) => ({ at: new THREE.Vector3(...q.at), box: q.box || null, mats: new Set(), clones: new Map(), rt: null }));
+    const zoneOf = (v) => probes.find((q) => q.box && v.x >= q.box[0] && v.x <= q.box[2] && v.z >= q.box[1] && v.z <= q.box[3]) || probes[0];
+    const owner = new Map();
+    const tmpBox = new THREE.Box3(), tmpAt = new THREE.Vector3();
+    const claim = (o, at, dark) => {
+      const zone = zoneOf(at);
+      const next = [].concat(o.material).map((m) => {
+        if (lit.has(m) || !m.isMeshStandardMaterial) return m;
+        let use = m;
+        if (owner.has(m) && owner.get(m) !== zone) {
+          // 같은 재질을 쓰는 물건이 다른 구역에도 있다: 이 구역 몫을 따로 둔다
+          use = zone.clones.get(m) || m.clone();
+          zone.clones.set(m, use);
+        }
+        owner.set(use, zone);
+        zone.mats.add(use);
+        use.envMapIntensity = dark ? 0.22 : 1;
+        return use;
+      });
+      o.material = Array.isArray(o.material) ? next : next[0];
+    };
     level.traverse((o) => {
       if (!o.isMesh) return;
       const name = `${o.name} ${o.parent?.name || ""}`;
-      if (/glass/.test(name)) o.material = glass;
-      for (const m of [].concat(o.material)) {
-        if (lit.has(m) || !m.isMeshStandardMaterial) continue;
-        m.envMapIntensity = dim.test(o.name) || dim.test(o.parent?.name || "") ? 0.22 : 1;
-        free.add(m);
-      }
+      if (/glass/.test(name)) return void (o.material = glass);
+      claim(o, tmpBox.setFromObject(o).getCenter(tmpAt), dim.test(o.name) || dim.test(o.parent?.name || ""));
     });
-    for (const npc of npcs) npc.root.traverse((o) => o.isMesh && [].concat(o.material).forEach((m) => m.isMeshStandardMaterial && free.add(m)));
+    for (const npc of npcs) npc.root.traverse((o) => o.isMesh && claim(o, npc.root.position, false));
     scene.environment = null;
     hemi.intensity = 0;
     const cubeRT = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
-    const cubeCam = new THREE.CubeCamera(0.1, 40, cubeRT);
-    cubeCam.position.set(center.x, 1.4, center.z);
+    const cubeCam = new THREE.CubeCamera(0.1, 80, cubeRT);
     scene.add(cubeCam);
     const keep = new Set([...LM.meshes, "lamps", "sky_backdrop"].map((n) => nodes[n]).filter(Boolean));
     let skyMat = null;
     nodes.sky_backdrop?.traverse((o) => o.isMesh && (skyMat ||= [].concat(o.material)[0]));
     const skyBase = skyMat?.emissiveIntensity ?? 1;
     const DUSK_SKY = new THREE.Color(0x5a6fb5);
-    let envRT = null;
     bake = {
       at: [-1, -1],
       set(sunF, skyF) {
@@ -240,15 +274,18 @@ export async function createSite(root, def, opts = {}) {
           o.visible = false;
           hidden.push(o);
         }
-        cubeCam.update(renderer, scene);
+        for (const q of probes) {
+          cubeCam.position.copy(q.at);
+          cubeCam.update(renderer, scene);
+          const next = pmrem.fromCubemap(cubeRT.texture);
+          for (const m of q.mats) m.envMap = next.texture;
+          q.rt?.dispose();
+          q.rt = next;
+        }
         for (const o of hidden) o.visible = true;
-        const next = pmrem.fromCubemap(cubeRT.texture);
-        for (const m of free) m.envMap = next.texture;
-        envRT?.dispose();
-        envRT = next;
       },
       dispose() {
-        envRT?.dispose();
+        for (const q of probes) q.rt?.dispose();
         cubeRT.dispose();
         for (const t of tex) t.dispose();
       },
@@ -269,7 +306,7 @@ export async function createSite(root, def, opts = {}) {
     }
     spots.push({ ...s, pos });
   }
-  for (const npc of npcs) spots.push({ id: `talk_${npc.def.id}`, kind: "npc", npc, label: npc.def.name, verb: "말을 건다", minutes: 0, pos: npc.headPos().clone().setY(npc.def.height * 0.86), radius: 3.2, reach: 2.0 });
+  for (const npc of npcs) spots.push({ id: `talk_${npc.def.id}`, kind: "npc", npc, showIf: npc.def.when || null, label: npc.def.name, verb: "말을 건다", minutes: 0, pos: npc.headPos().clone().setY(npc.def.height * 0.86), radius: 3.2, reach: 2.0 });
   // 같은 자리에 겹친 조사점은 표시를 하나만 쓴다
   const markerAt = new Map();
   for (const s of spots) {
@@ -287,11 +324,11 @@ export async function createSite(root, def, opts = {}) {
   const P = { x: 0, z: 0, yaw: 0, pitch: 0 }; // 서 있는 자리와 고개
   const V = { x: 0, y: EYE, z: 0, yaw: 0, pitch: 0 }; // 실제 카메라 (가까이 볼 때는 P에서 떨어진다)
   {
-    const sp = wpos(def.start.spawn) || center;
+    const sp = wpos(spawnName) || center;
     P.x = sp.x;
     P.z = sp.z;
-    if (nodes[def.start.spawn]) {
-      const f = new THREE.Vector3(1, 0, 0).applyQuaternion(nodes[def.start.spawn].getWorldQuaternion(new THREE.Quaternion()));
+    if (nodes[spawnName]) {
+      const f = new THREE.Vector3(1, 0, 0).applyQuaternion(nodes[spawnName].getWorldQuaternion(new THREE.Quaternion()));
       P.yaw = Math.atan2(-f.x, -f.z);
     }
   }
@@ -304,13 +341,67 @@ export async function createSite(root, def, opts = {}) {
   let focused = null;
   let scan = 0;
   let pointerLocked = false;
+  let wantLock = false; // 플레이어가 마우스로 둘러보던 중인가 (손이 필요한 화면에서 돌아오면 다시 잡는다)
+  let selfExit = false; // 방금 마우스를 놓은 것이 엔진인가
+  let handsFree = 0; // 걷는 화면 위에 뜬 선택지처럼, 모드는 그대로인데 손끝이 필요한 때
+  let hoverPick = false;
+  let lockTipShown = false;
   const keys = new Set();
-  const mouse = { x: 0, y: 0, down: false, moved: 0, t: 0, inside: false };
+  const mouse = { x: 0, y: 0, inside: false };
   const ladderEye = () => wpos("view_ladder_top");
 
+  // ── 시선 ──
+  // 화면을 한 번 누르면 마우스가 화면에 잡히고, 그 뒤로는 마우스를 움직이는 대로 시선이 돈다.
+  // 수첩이나 대화처럼 손끝이 필요한 화면에서는 마우스를 놓아 주고, 걷는 화면으로 돌아오면 다시 잡는다.
+  const LOOK = new Set(["walk", "ladder"]);
+  const HANDS = new Set(["inspect", "talk", "book", "board", "probe", "travel"]);
+  const LOOK_SENS = 0.0021, LOOK_JUMP = 160;
+  // 브라우저가 마우스를 잡게 해 주지 않는 곳(앱에 끼워 넣은 창 따위)에서는 잡지 않은 채로 따라간다:
+  // 마우스를 움직이는 만큼 돌고, 화면 가장자리에 대고 있으면 계속 돈다.
+  let follow = false, lockDeniedOnce = false;
+  const looking = () => pointerLocked || follow;
+  function markLook() {
+    hud.layer.classList.toggle("locked", looking());
+    canvas.style.cursor = follow ? "none" : "";
+    if (looking() && !lockTipShown) {
+      lockTipShown = true;
+      hud.layer.classList.add("lock-tip");
+      setTimeout(() => hud.layer.classList.remove("lock-tip"), 3600);
+    }
+  }
+  function lockDenied() {
+    lockDeniedOnce = true;
+    if (wantLock && !pointerLocked) follow = true;
+    markLook();
+  }
+  function grabLook() {
+    wantLock = true;
+    if (pointerLocked) return;
+    if (lockDeniedOnce || !canvas.requestPointerLock) return lockDenied();
+    try {
+      canvas.requestPointerLock()?.catch?.(lockDenied);
+    } catch {
+      lockDenied();
+    }
+  }
+  function releaseLook(keep = false) {
+    wantLock = keep;
+    if (!keep) follow = false;
+    if (pointerLocked) {
+      selfExit = true;
+      document.exitPointerLock?.();
+    }
+    markLook();
+  }
+  function syncLock() {
+    if (HANDS.has(mode) || handsFree) {
+      if (pointerLocked) releaseLook(true);
+    } else if (LOOK.has(mode) && wantLock && !pointerLocked) grabLook();
+  }
   const setMode = (m) => {
     mode = m;
     hud.setMode(m);
+    syncLock();
   };
   const syncView = () => {
     if (mode === "walk") Object.assign(V, { x: P.x, y: EYE, z: P.z, yaw: P.yaw, pitch: P.pitch });
@@ -348,6 +439,13 @@ export async function createSite(root, def, opts = {}) {
   }
   function refresh(spent = 0) {
     applyNodes();
+    // 인물의 하루: 올 시각이 아니면 그 자리에 없다
+    for (const npc of npcs) {
+      if (!npc.def.when) continue;
+      const on = lockOpen(npc.def.when, st);
+      npc.root.visible = on;
+      setBoxEnabled(nav, `npc_${npc.def.id}`, on);
+    }
     for (const d of runDeadlines(def, st)) if (d.note) hud.toast(d.note, "warn", 6000);
     const q = currentQuestion(def, st);
     hud.setQuestion(q, questionProgress(q, st));
@@ -363,7 +461,7 @@ export async function createSite(root, def, opts = {}) {
     const url = shot || shrink(canvas, zoom);
     if (!url) return false;
     photos[id] = url;
-    savePhotos(def.id, photos);
+    savePhotos(saveKey, photos);
     return true;
   }
   const announce = (fresh, zoom, taken) => {
@@ -380,7 +478,7 @@ export async function createSite(root, def, opts = {}) {
   function bark(key) {
     if (!key) return;
     for (const npc of npcs) {
-      const line = npc.def.barks?.[key];
+      const line = npc.root.visible && npc.def.barks?.[key];
       if (line) {
         hud.bubble(npc.def.name, line);
         npc.nod();
@@ -406,6 +504,12 @@ export async function createSite(root, def, opts = {}) {
       const s = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
       const turn = (keys.has("ArrowLeft") ? 1 : 0) - (keys.has("ArrowRight") ? 1 : 0);
       if (turn) P.yaw += turn * 1.9 * dt;
+      if (follow && mouse.inside) {
+        // 가장자리 한 뼘 안에 마우스를 대고 있으면 그쪽으로 계속 돈다
+        const nx = mouse.x / (canvas.clientWidth || 1), edge = 0.12;
+        const push = nx < edge ? (edge - nx) / edge : nx > 1 - edge ? -(nx - (1 - edge)) / edge : 0;
+        if (push) P.yaw += clamp(push, -1, 1) * 1.7 * dt;
+      }
       if (f || s) {
         walk?.resolve(false);
         walk = null;
@@ -428,8 +532,8 @@ export async function createSite(root, def, opts = {}) {
         const sp = Math.min(d, WALK * 1.15 * dt);
         mx = (dx / d) * sp;
         mz = (dz / d) * sp;
-        if (!mouse.down) P.yaw += angDiff(Math.atan2(-dx, -dz), P.yaw) * Math.min(1, dt * 4);
-        if (!mouse.down) P.pitch += (0 - P.pitch) * Math.min(1, dt * 2);
+        P.yaw += angDiff(Math.atan2(-dx, -dz), P.yaw) * Math.min(1, dt * 4);
+        P.pitch += (0 - P.pitch) * Math.min(1, dt * 2);
       }
     }
     if (mx || mz) {
@@ -461,6 +565,10 @@ export async function createSite(root, def, opts = {}) {
   }
   async function interact(spot, how = {}) {
     if (busy || !spot) return;
+    const then = await interactNow(spot, how);
+    if (typeof then === "function") await then(); // 살펴본 것이 다른 화면을 연다 (노트북, 벽의 판, 지도)
+  }
+  async function interactNow(spot, how) {
     const status = spotStatus(spot, st);
     if (status === "hidden") return;
     busy = true;
@@ -512,8 +620,18 @@ export async function createSite(root, def, opts = {}) {
         await tweenTo({ x: home.x, y: home.y, z: home.z, yaw: home.yaw, pitch: home.pitch }, 0.45);
         setMode(back);
       }
-      refresh(st.minute - before);
+      if (spot.gives?.until != null && st.minute - before >= 30) {
+        // 오래 기다렸다: 화면이 어두워졌다 밝아지는 사이에 빛이 바뀐다
+        await hud.fade(true, 500);
+        refresh(st.minute - before);
+        await sleep(350);
+        await hud.fade(false, 900);
+      } else refresh(st.minute - before);
       await runTriggers();
+      if (spot.probe) return () => openProbe(spot.probe);
+      if (spot.open) return () => openOverlay(spot.open);
+      if (spot.travel) return () => openMap();
+      if (spot.goto) return () => depart(spot.goto.site, spot.goto);
     } finally {
       busy = false;
     }
@@ -614,7 +732,6 @@ export async function createSite(root, def, opts = {}) {
     walk?.resolve(false);
     walk = null;
     keys.clear();
-    if (pointerLocked) document.exitPointerLock?.();
     hud.setPrompt("", null);
     setMode(kind);
     let next = null;
@@ -640,6 +757,86 @@ export async function createSite(root, def, opts = {}) {
     }
   }
   hud.onBelt = (k) => openOverlay(k);
+
+  // ── 기록을 읽는 화면 (노트북) ──
+  async function openProbe(id) {
+    const probe = probeOf(def, id);
+    if (busy || mode !== "walk" || !probe || probeStatus(def, st, probe) === "hidden") return;
+    const before = st.minute, res = probeOpen(def, st, id);
+    if (!res.ok) return;
+    busy = true;
+    walk?.resolve(false);
+    walk = null;
+    keys.clear();
+    hud.setPrompt("", null);
+    setMode("probe");
+    let next = null;
+    try {
+      const view = PROBES[probe.kind]({ root, def, st, id: probe.ref, save: () => saveSite(st), spent: res.minutes });
+      overlay = view.api;
+      next = await view;
+    } finally {
+      overlay = null;
+      setMode("walk");
+      busy = false;
+    }
+    refresh(st.minute - before);
+    if (next === "book" || next === "board") return openOverlay(next);
+    busy = true;
+    try {
+      await runTriggers();
+    } finally {
+      busy = false;
+    }
+  }
+
+  // ── 장소를 옮긴다 ──
+  // 문을 나서면 손으로 그린 약도가 펼쳐진다. 고르면 시간이 가고, 그 장소의 현장을 새로 연다.
+  async function openMap() {
+    if (busy || mode !== "walk" || !def.places) return;
+    busy = true;
+    walk?.resolve(false);
+    walk = null;
+    keys.clear();
+    hud.setPrompt("", null);
+    setMode("travel");
+    let pick = null;
+    try {
+      const view = openTravel({ root, def, st });
+      overlay = view.api;
+      pick = await view;
+    } finally {
+      overlay = null;
+      setMode("walk");
+      busy = false;
+    }
+    if (pick) await depart(null, { place: pick });
+  }
+  async function depart(site, how = {}) {
+    busy = true;
+    setMode("cine");
+    if (how.place) site = travelTo(def, st, how.place)?.site;
+    if (!site) {
+      setMode("walk");
+      busy = false;
+      return;
+    }
+    saveSite(st);
+    sfx.page();
+    await hud.fade(true, 600);
+    if (how.card) {
+      const card = el("div.s-titlecard", how.card.map((l, i) => el(i ? "h1" : "p", l)));
+      root.append(card);
+      await sleep(3200);
+    }
+    const q = new URLSearchParams(location.search);
+    q.set("site", site);
+    q.delete("fresh");
+    q.delete("case");
+    if (how.carry) q.set("carry", saveKey);
+    else q.delete("carry");
+    location.href = `${location.pathname}?${q}`;
+  }
 
   // ── 도구 ──
   function setTool(name) {
@@ -690,7 +887,7 @@ export async function createSite(root, def, opts = {}) {
     for (const { s, status, dist } of shown.values()) {
       const ang = fwd.angleTo(tmp.copy(s.pos).sub(eye).normalize());
       let score = ang;
-      if (mouse.inside && !pointerLocked && !mouse.down) {
+      if (mouse.inside && !looking()) {
         tmp.copy(s.pos).project(camera);
         if (tmp.z < 1) {
           const px = (tmp.x * 0.5 + 0.5) * canvas.clientWidth, py = (-tmp.y * 0.5 + 0.5) * canvas.clientHeight;
@@ -711,6 +908,8 @@ export async function createSite(root, def, opts = {}) {
       m.live = false;
     }
     focused = best;
+    hoverPick = !!best && bestScore < 0;
+    hud.layer.classList.toggle("free", active && !looking());
     if (focused) {
       focused.marker.update(0, eye.distanceTo(focused.pos), true);
       const first = !st.seen[focused.id];
@@ -726,14 +925,15 @@ export async function createSite(root, def, opts = {}) {
     if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
     if (e.type === "keyup") return void keys.delete(e.code);
     if (e.code === "Tab") e.preventDefault();
-    if (mode === "inspect" || mode === "talk" || mode === "book" || mode === "board") return;
+    if (mode === "inspect" || mode === "talk" || mode === "book" || mode === "board" || mode === "probe" || mode === "travel") return;
     keys.add(e.code);
     if (e.repeat) return;
     if (["KeyE", "Enter", "Space"].includes(e.code)) {
       e.preventDefault();
       if (!hud.advance() && focused) interact(focused);
     } else if (e.code === "Escape") {
-      if (mode === "ladder" && !busy) interact(spots.find((s) => s.descend));
+      if (follow && !busy && LOOK.has(mode)) releaseLook(); // 잡힌 마우스는 브라우저가 Esc로 놓아 준다. 따라가는 중이면 여기서 놓는다
+      else if (mode === "ladder" && !busy) interact(spots.find((s) => s.descend));
       else if (tool) setTool(tool);
     } else if (busy) return;
     else if (e.code === "KeyF" && st.items.includes("phone")) setTool("phone");
@@ -742,65 +942,59 @@ export async function createSite(root, def, opts = {}) {
     else if (e.code === "Tab") openOverlay("book");
     else if (e.code === "KeyB") openOverlay("board");
     else if (e.code === "KeyH") openOverlay("book", "keys");
-    else if (e.code === "KeyL") pointerLocked ? document.exitPointerLock() : canvas.requestPointerLock?.();
+    else if (e.code === "KeyL") looking() ? releaseLook() : grabLook();
   };
   async function openInventory() {
     const list = st.items.map((id) => def.items[id]).filter((it) => it?.inspect);
     if (!list.length || busy) return;
     busy = true;
+    handsFree++;
+    syncLock();
     try {
       const pick = await choose(root, { prompt: "무엇을 꺼내 볼까", options: [...list.map((it) => ({ id: it.inspect, label: it.title, sub: it.hint || "" })), { id: null, label: "그만둔다", sub: "" }] });
-      if (pick.id) await inspect(pick.id, true);
+      if (pick.id) {
+        await inspect(pick.id, true);
+        await runTriggers(); // 꺼내 본 것이 일을 일으킨다 (펜을 안경 너머로 본 뒤)
+      }
     } finally {
       busy = false;
+      handsFree--;
+      syncLock();
     }
   }
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
-    mouse.down = true;
-    mouse.moved = 0;
-    mouse.t = performance.now();
-    canvas.setPointerCapture?.(e.pointerId);
+    if (hud.advance()) return; // 자막을 넘긴다
+    if (busy || !LOOK.has(mode)) return;
+    // 마우스를 잡고 있을 때는 눈길이 닿은 것을, 놓고 있을 때는 손끝으로 짚은 것만 살펴본다
+    if (focused && (looking() || hoverPick)) return void interact(focused);
+    if (!looking()) grabLook();
   };
   const onPointerMove = (e) => {
     const r = canvas.getBoundingClientRect();
     mouse.x = e.clientX - r.left;
     mouse.y = e.clientY - r.top;
     mouse.inside = true;
-    const looking = pointerLocked || mouse.down;
-    if (!looking || !(mode === "walk" || mode === "ladder") || busy) return;
-    mouse.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
-    const k = pointerLocked ? 0.0022 : -0.0034; // 끌 때는 화면을 잡아끄는 방향
-    P.yaw -= e.movementX * k;
-    P.pitch = clamp(P.pitch - e.movementY * k, -PITCH_MAX, PITCH_MAX);
-  };
-  const onPointerUp = (e) => {
-    if (e.button !== 0 || !mouse.down) return;
-    mouse.down = false;
-    if (mouse.moved > 6 || performance.now() - mouse.t > 450) return;
-    if (hud.advance()) return;
-    if (busy || !(mode === "walk" || mode === "ladder")) return;
-    if (focused) return void interact(focused);
-    if (mode !== "walk") return;
-    // 바닥을 누르면 그 자리로 걸어간다
-    const ray = new THREE.Raycaster();
-    const ndc = pointerLocked ? new THREE.Vector2(0, 0) : new THREE.Vector2((mouse.x / canvas.clientWidth) * 2 - 1, -(mouse.y / canvas.clientHeight) * 2 + 1);
-    ray.setFromCamera(ndc, camera);
-    const hit = ray.intersectObject(level, true).find((h) => h.object.visible && !h.object.name.startsWith("col_"));
-    // 바닥이면 그 자리로, 가구면 그 곁으로. 벽 위쪽이나 천장을 누른 것은 걷지 않는다.
-    if (hit && hit.point.y < 1.3) walkTo(hit.point.x, hit.point.z);
+    if (!looking() || busy || !LOOK.has(mode)) return;
+    // 잠근 직후나 창을 오갈 때 브라우저가 한 번씩 큰 값을 던진다. 그런 튐은 버린다.
+    const mx = clamp(e.movementX, -LOOK_JUMP, LOOK_JUMP), my = clamp(e.movementY, -LOOK_JUMP, LOOK_JUMP);
+    P.yaw -= mx * LOOK_SENS;
+    P.pitch = clamp(P.pitch - my * LOOK_SENS, -PITCH_MAX, PITCH_MAX);
   };
   const onLock = () => {
     pointerLocked = document.pointerLockElement === canvas;
-    hud.layer.classList.toggle("locked", pointerLocked);
+    if (!pointerLocked && !selfExit) wantLock = false; // 플레이어가 Esc로 마우스를 놓았다
+    selfExit = false;
+    if (pointerLocked) follow = false;
+    markLook();
   };
   window.addEventListener("keydown", onKey);
   window.addEventListener("keyup", onKey);
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
-  canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointerleave", () => (mouse.inside = false));
   document.addEventListener("pointerlockchange", onLock);
+  document.addEventListener("pointerlockerror", lockDenied);
   window.addEventListener("blur", () => keys.clear());
 
   // ── 크기 ──
@@ -821,7 +1015,7 @@ export async function createSite(root, def, opts = {}) {
   function updateLight(dt = 0) {
     const h = hourOf(st.minute) + (st.minute % 60) / 60;
     const want = daylight(h, L.sunrise, L.sunset);
-    if (h < 12) want.sun = 0; // 창은 서쪽이다: 아침 해는 들지 않는다
+    if (L.sunFrom != null && h < L.sunFrom) want.sun = 0; // 해가 이 시각부터 든다 (서쪽 창의 교실에는 아침 해가 들지 않는다)
     const k = lightNow.sun < 0 ? 1 : Math.min(1, dt * 0.45);
     lightNow.sun += (want.sun - lightNow.sun) * k;
     lightNow.sky += (want.sky - lightNow.sky) * k;
@@ -975,7 +1169,7 @@ export async function createSite(root, def, opts = {}) {
       shoot(scene, cam, key, 1.7);
       for (const m of markerAt.values()) m.sprite.visible = true;
     }
-    if (taken) savePhotos(def.id, photos);
+    if (taken) savePhotos(saveKey, photos);
   }
 
   // ── 시작 ──
@@ -992,7 +1186,9 @@ export async function createSite(root, def, opts = {}) {
   }
   const ambience = startAmbience(canvas);
   frame();
-  if (!Object.keys(st.seen).length && def.sketch) hud.sketch(def.sketch);
+  // 처음 들어선 곳에서는 현장 스케치가, 옮겨 온 곳에서는 도착한 시각이 흐른다
+  const hello = [...(arrived ? [`${def.title} · ${fmtClock(st.minute)}`] : []), ...(firstVisit && def.sketch ? def.sketch : [])];
+  if (hello.length) hud.sketch(hello);
   runTriggers();
 
   const api = {
@@ -1012,13 +1208,16 @@ export async function createSite(root, def, opts = {}) {
     // 수첩과 증거판 (검증용): book("facts"), board(), 펼친 것의 손잡이는 overlay()
     book: (tab) => openOverlay("book", tab),
     board: () => openOverlay("board"),
+    probe: openProbe, travel: openMap, go: (place) => depart(null, { place }),
+    npcs: () => npcs.map((n) => ({ id: n.def.id, here: n.root.visible })),
     overlay: () => overlay,
     photos, map: mapData,
     info: () => ({ tris: renderer.info.render.triangles, calls: renderer.info.render.calls, textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries, model: modelUrl, baked, light: { ...lightNow } }),
     reset: () => {
       clearSite(def);
-      clearPhotos(def.id);
-      location.reload();
+      clearPhotos(saveKey);
+      if (def.save) location.href = `${location.pathname}?case=${def.save}&fresh${opts.blockout ? "&blockout" : ""}`; // 사건은 첫 장소에서 다시 시작한다
+      else location.reload();
     },
     dispose: () => {
       cancelAnimationFrame(raf);
@@ -1029,6 +1228,7 @@ export async function createSite(root, def, opts = {}) {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKey);
       document.removeEventListener("pointerlockchange", onLock);
+      document.removeEventListener("pointerlockerror", lockDenied);
       renderer.dispose();
       hud.dispose();
       canvas.remove();

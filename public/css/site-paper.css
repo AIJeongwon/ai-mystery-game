@@ -401,3 +401,78 @@
 .b-cmp-foot { display: flex; align-items: center; gap: 20px; }
 .b-cmp-fb { font: 15px var(--font-serif); color: var(--text-2); text-align: center; max-width: 620px; }
 .b-cmp-fb.miss { color: #ffb4a3; }
+
+/* ══════════ 약도 (장소를 옮긴다) ══════════
+   수첩에서 뜯어낸 한 장. 연필로 그린 강과 길, 붉은 색연필로 친 동그라미. */
+.s-hud[data-mode="travel"] > :not(.s-veil) { visibility: hidden; }
+.tv-layer { position: absolute; inset: 0; z-index: 24; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 44%, rgba(8, 10, 14, 0.6), rgba(3, 4, 6, 0.88)); animation: n-fade 0.24s ease both; user-select: none; }
+.tv-layer.out { animation: n-fade 0.24s ease reverse both; pointer-events: none; }
+.tv-sheet { position: relative; width: min(940px, 94vw, calc((100vh - 60px) * 1.26)); padding: 22px 30px 16px; rotate: 0.5deg; color: var(--paper-ink); font-family: var(--font-serif);
+  background: repeating-linear-gradient(transparent 0 29px, rgba(70, 96, 130, 0.09) 29px 30px), var(--fiber), linear-gradient(175deg, #f3ecdc, #e6dcc5); background-blend-mode: normal, multiply, normal; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.65), inset 0 0 60px rgba(120, 96, 60, 0.12); animation: n-rise 0.36s var(--ease) both;
+  /* 위쪽은 용수철에서 뜯어낸 자국 */
+  clip-path: polygon(0 7px, 1.5% 2px, 3% 8px, 5% 3px, 7% 9px, 9% 2px, 11% 8px, 13% 3px, 15% 9px, 17% 2px, 19% 8px, 21% 3px, 23% 9px, 25% 2px, 27% 8px, 29% 3px, 31% 9px, 33% 2px, 35% 8px, 37% 3px, 39% 9px, 41% 2px, 43% 8px, 45% 3px, 47% 9px, 49% 2px, 51% 8px, 53% 3px, 55% 9px, 57% 2px, 59% 8px, 61% 3px, 63% 9px, 65% 2px, 67% 8px, 69% 3px, 71% 9px, 73% 2px, 75% 8px, 77% 3px, 79% 9px, 81% 2px, 83% 8px, 85% 3px, 87% 9px, 89% 2px, 91% 8px, 93% 3px, 95% 9px, 97% 2px, 100% 7px, 100% 100%, 0 100%); }
+.tv-layer.out .tv-sheet { animation: n-drop 0.24s ease-in both; }
+.tv-head { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 4px 0; }
+.tv-head h2 { margin: 0; font: 400 34px/1 var(--font-hand); color: var(--ink-blue); letter-spacing: 0.02em; }
+.tv-clock { font: 700 14px/1 var(--font-serif); color: var(--paper-ink-2); letter-spacing: 0.04em; }
+.tv-map { display: block; width: 100%; height: auto; margin: 2px 0 4px; overflow: visible; }
+.tv-water { fill: rgba(86, 122, 156, 0.16); stroke: none; }
+.tv-bank { fill: none; stroke: rgba(52, 78, 110, 0.55); stroke-width: 1.5; stroke-linecap: round; }
+.tv-ripple { fill: none; stroke: rgba(52, 78, 110, 0.32); stroke-width: 1.1; stroke-linecap: round; }
+.tv-stream { fill: none; stroke: rgba(52, 78, 110, 0.42); stroke-width: 4; stroke-linecap: round; }
+.tv-bridge { fill: none; stroke: rgba(40, 36, 30, 0.75); stroke-width: 2.4; stroke-linecap: round; }
+.tv-tie { fill: none; stroke: rgba(40, 36, 30, 0.6); stroke-width: 1.2; }
+.tv-road { fill: none; stroke: rgba(60, 54, 44, 0.22); stroke-width: 1.6; stroke-linecap: round; }
+.tv-name { font: 400 22px var(--font-hand); fill: rgba(60, 54, 44, 0.55); letter-spacing: 0.1em; }
+.tv-name.water { fill: rgba(52, 78, 110, 0.7); font-size: 26px; }
+.tv-name.small { font-size: 17px; letter-spacing: 0.04em; }
+.tv-name.small.water { font-size: 18px; }
+.tv-name.area { font-size: 40px; fill: rgba(60, 54, 44, 0.16); letter-spacing: 0.3em; }
+.tv-north path { fill: none; stroke: rgba(60, 54, 44, 0.5); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.tv-north text { font: 700 12px var(--font-ui); fill: rgba(60, 54, 44, 0.55); text-anchor: middle; }
+/* 길 */
+.tv-route { fill: none; stroke: var(--pencil); stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: 2.2 2.6; opacity: 0; transition: opacity 0.2s; }
+.tv-route.on { opacity: 0.55; }
+.tv-route.drawn { opacity: 1; stroke-width: 3.4; stroke-dasharray: 100; stroke-dashoffset: 100; animation: tv-draw 0.74s cubic-bezier(0.5, 0, 0.3, 1) forwards; }
+@keyframes tv-draw { to { stroke-dashoffset: 0; } }
+.tv-tag { opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+.tv-tag.on { opacity: 1; }
+.tv-tag rect { fill: var(--memo); stroke: rgba(60, 54, 44, 0.25); stroke-width: 0.8; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25)); }
+.tv-tag text { font: 400 19px var(--font-hand); fill: var(--paper-ink); }
+/* 곳 */
+.tv-pin { cursor: pointer; outline: none; }
+.tv-pin.here { cursor: default; }
+.tv-hit { fill: transparent; }
+.tv-dot { fill: rgba(243, 236, 220, 0.9); stroke: var(--paper-ink); stroke-width: 2; stroke-linejoin: round; transition: fill 0.15s; }
+.tv-pin.been .tv-dot { fill: rgba(60, 54, 44, 0.16); }
+.tv-pin.here .tv-dot { fill: var(--pencil); stroke: var(--pencil); }
+.tv-ring { fill: none; stroke: var(--pencil); stroke-width: 1.8; opacity: 0.8; transform-origin: center; transform-box: fill-box; animation: tv-ring 2.4s ease-in-out infinite; }
+@keyframes tv-ring { 50% { scale: 1.14; opacity: 0.35; } }
+.tv-num { font: 700 11px var(--font-ui); fill: var(--paper-ink); pointer-events: none; }
+.tv-label { font: 700 17px var(--font-serif); fill: var(--paper-ink); paint-order: stroke; stroke: rgba(243, 236, 220, 0.9); stroke-width: 5px; stroke-linejoin: round; }
+.tv-sub { font: 500 11.5px var(--font-ui); fill: var(--paper-ink-2); letter-spacing: 0.03em; paint-order: stroke; stroke: rgba(243, 236, 220, 0.9); stroke-width: 4px; }
+.tv-pin.here .tv-sub { fill: var(--pencil); font-weight: 700; }
+.tv-note { font: 400 17px var(--font-hand); fill: var(--ink-blue); paint-order: stroke; stroke: rgba(243, 236, 220, 0.9); stroke-width: 4px; }
+.tv-pin:not(.here):hover .tv-dot, .tv-pin.hot:not(.here) .tv-dot, .tv-pin:not(.here):focus-visible .tv-dot { fill: var(--memo); stroke: var(--pencil); }
+.tv-pin.hot:not(.here) .tv-label { fill: var(--pencil); }
+.tv-pin.picked .tv-dot { fill: var(--pencil); stroke: var(--pencil); }
+.tv-pin.picked .tv-num { fill: #fff; }
+.tv-sheet.going .tv-pin:not(.picked):not(.here) { opacity: 0.4; transition: opacity 0.3s; }
+/* 아래 줄 */
+.tv-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 34px; padding: 8px 4px 2px; border-top: 1px dashed rgba(60, 54, 44, 0.3); font-size: 14.5px; }
+.tv-info b { font-weight: 700; }
+.tv-info .tv-dim { color: var(--paper-ink-2); }
+.tv-info .tv-time { margin-left: 12px; padding: 1px 8px; background: var(--memo); font: 400 20px/1.2 var(--font-hand); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); rotate: -0.6deg; display: inline-block; }
+.tv-info .tv-late { margin-left: 8px; color: var(--pencil); font-weight: 700; }
+.tv-stay { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px solid rgba(60, 54, 44, 0.35); background: transparent; color: var(--paper-ink-2); font: 500 12.5px var(--font-ui); cursor: pointer; border-radius: 3px; transition: background 0.15s, color 0.15s; }
+.tv-stay:hover { background: var(--paper-ink); color: var(--paper); }
+
+/* ── 장과 장 사이의 검은 화면 ── */
+.s-titlecard { position: absolute; inset: 0; z-index: 40; display: grid; place-content: center; gap: 14px; text-align: center; background: #000; color: var(--text); animation: s-titlecard 3.2s ease both; }
+.s-titlecard p { margin: 0; font: 500 13px var(--font-ui); letter-spacing: 0.34em; color: var(--text-3); }
+.s-titlecard h1 { margin: 0; font: 700 34px var(--font-serif); letter-spacing: 0.14em; }
+@keyframes s-titlecard { 0% { opacity: 0; } 18%, 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .tv-ring { animation: none; }
+  .tv-route.drawn { animation-duration: 0.01s; }
+}

@@ -39,6 +39,7 @@ export function makeHud(root) {
   const clock = el("div.s-clock");
   const question = el("div.s-question");
   const dot = el("div.s-dot");
+  const lookHint = el("div.s-lookhint", el("span.free", el("kbd", "클릭"), "마우스로 둘러본다"), el("span.held", el("kbd", "Esc"), "마우스를 놓는다"));
   const prompt = el("div.s-prompt.off");
   const caption = el("div.s-caption.off");
   const toasts = el("div.s-toasts");
@@ -49,7 +50,7 @@ export function makeHud(root) {
   const stats = el("div.s-stats.off");
   const tool = el("div.s-tool.off");
   const veil = el("div.s-veil");
-  const layer = el("div.s-hud", el("div.s-top", el("div.s-where", place, clock), question), dot, prompt, caption, toasts, belt, sketch, bubble, tool, stats, flash, veil);
+  const layer = el("div.s-hud", el("div.s-top", el("div.s-where", place, clock), question), dot, lookHint, prompt, caption, toasts, belt, sketch, bubble, tool, stats, flash, veil);
   root.append(layer);
 
   const hud = { layer, tool, busy: false };

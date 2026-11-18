@@ -233,7 +233,8 @@ export function questionsPage(def, st) {
     if (!lockOpen(q.when, st)) continue;
     const cards = (q.cards || []).map((id) => ({ id, title: def.evidence[id]?.title || id, owned: id in st.evidence }));
     const have = cards.filter((c) => c.owned).length;
-    list.push({ q, now: q === cur, done: q !== cur && have === cards.length, have, total: cards.length, cards, hints: (q.hints || []).slice(0, st.hints[q.id] || 0) });
+    const closed = Boolean(q.until && lockOpen(q.until, st)); // 곁가지 물음은 풀면 닫힌다
+    list.push({ q, now: q === cur, done: closed || (q !== cur && have === cards.length), have, total: cards.length, cards, hints: (q.hints || []).slice(0, st.hints[q.id] || 0) });
   }
   const deds = dedOpen(def, st).map((d) => ({ ded: d, solved: dedState(st, d.id).solved, sentence: dedState(st, d.id).solved ? dedSentence(def, d, st) : null }));
   return { current: cur, list, deds };
@@ -250,7 +251,7 @@ export function factsPage(def, st) {
     else (ev.carried ? carried : here).push(item);
   }
   // 증거가 되지 않은 관찰도 적는다. 그 가운데 몇은 증거판으로 꺼낼 수 있다.
-  for (const s of def.spots || []) {
+  for (const s of def.allSpots || def.spots || []) {
     if (!s.note || !st.seen[s.id]) continue;
     here.push({ id: null, spot: s.id, title: s.label, text: s.note, kind: "관찰", minute: st.seenAt?.[s.id] ?? st.minute, mark: "seen", pull: s.card && !(s.card in st.evidence) ? s.card : null, pulled: Boolean(s.card && s.card in st.evidence) });
   }
@@ -259,11 +260,11 @@ export function factsPage(def, st) {
     if (note) here.push({ id: null, title: "고른 것", text: note, kind: "선택", minute: st.minute, mark: "seen" });
   }
   here.sort((a, b) => a.minute - b.minute);
-  return [{ title: "앞서 알아낸 것", items: carried }, { title: def.title, items: here }, { title: "판에서 이은 것", items: notes }].filter((g) => g.items.length);
+  return [{ title: "앞서 알아낸 것", items: carried }, { title: def.caseTitle || def.title, items: here }, { title: "판에서 이은 것", items: notes }].filter((g) => g.items.length);
 }
 // 수첩의 관찰을 증거판의 카드로 꺼낸다
 export function pullFact(def, st, cardId) {
-  const s = (def.spots || []).find((x) => x.card === cardId);
+  const s = (def.allSpots || def.spots || []).find((x) => x.card === cardId);
   if (!s || !st.seen[s.id] || cardId in st.evidence) return null;
   return apply(st, { evidence: [cardId] });
 }
@@ -283,7 +284,7 @@ export function peoplePage(def, st) {
   const out = [];
   for (const p of def.people || []) {
     if (!lockOpen(p.when, st)) continue;
-    const npc = p.npc ? def.npcs.find((n) => n.id === p.npc) : null;
+    const npc = p.npc ? (def.cast || def.npcs).find((n) => n.id === p.npc) : null; // 사건의 인물은 다른 장소에 있어도 수첩에 남는다
     const me = npc ? st.npc[npc.id] : null;
     out.push({
       id: p.id, npc: p.npc || null, name: npc?.name || p.name, role: npc?.role || p.role, photo: p.photo || null, unknown: Boolean(p.unknown), where: p.where || "",

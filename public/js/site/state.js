@@ -4,9 +4,14 @@
 const KEY = "gijeongsasil.site.";
 const DAYS = ["금요일", "토요일", "일요일", "월요일", "화요일"]; // 0분 = 금요일(D+1) 0시
 
+// 여러 장소가 한 사건의 상태를 함께 쓸 때는 def.save가 저장 이름이다 (프롤로그의 네 장소).
+export const saveKeyOf = (def) => def.save || def.id;
+
 export function newSiteState(def) {
   return {
-    site: def.id,
+    site: saveKeyOf(def),
+    at: def.id, //     지금 있는 장소
+    visits: {}, //     장소 id → 들어선 횟수
     minute: def.start.minute,
     evidence: Object.fromEntries((def.start.evidence || []).map((id) => [id, def.start.minute])), // id → 얻은 시각(분)
     statements: [], // 밑줄 친 구절 { id, who, text, minute }
@@ -103,6 +108,7 @@ export function apply(st, effect = {}) {
   for (const n of effect.hide || []) st.nodes[n] = false;
   if ("holding" in effect) st.holding = effect.holding;
   if (effect.minutes) st.minute += effect.minutes;
+  if (effect.until != null) st.minute = Math.max(st.minute, effect.until); // 그 시각까지 기다린다
   return fresh;
 }
 
@@ -116,10 +122,12 @@ export function useSpot(st, spot) {
 
 export const nodeVisible = (def, st, name) => (name in st.nodes ? st.nodes[name] : def.nodes?.[name] ?? true);
 
+// 물음은 when이 맞으면 열리고, until이 맞으면 닫힌다 (곁가지 물음: 풀고 나면 앞의 물음으로 돌아간다)
+export const questionOpen = (q, st) => lockOpen(q.when, st) && !(q.until && lockOpen(q.until, st));
 // 지금의 물음: 조건이 맞는 것 가운데 마지막(가장 나아간) 것
 export function currentQuestion(def, st) {
   let cur = null;
-  for (const q of def.questions || []) if (lockOpen(q.when, st)) cur = q;
+  for (const q of def.questions || []) if (questionOpen(q, st)) cur = q;
   return cur;
 }
 // 물음에 쓸 카드가 몇 장 모였나 → [가진 수, 전체 수]
@@ -147,13 +155,15 @@ export function nextDeadline(def, st) {
 }
 
 // ── 대화의 공개 규칙 ──
-// fact.rule: [ { trust:n } | { shown:[증거..] } | { ask:[[낱말..]..] } | { always:true } ] 가운데 하나라도 맞으면 말할 수 있다.
+// fact.rule: [ { trust:n } | { shown:[증거..] } | { ask:[[낱말..]..] } | { evidence:[..] } | { flags:[..] } | { notFlags:[..] } | { always:true } ] 가운데 하나라도 맞으면 말할 수 있다.
 function ruleMatches(rule, ctx) {
+  if (rule.flags && !rule.flags.every((f) => ctx.flags?.[f])) return false;
+  if (rule.notFlags && rule.notFlags.some((f) => ctx.flags?.[f])) return false; // 이미 지나간 말은 하지 않는다
   if (rule.trust != null && ctx.trust < rule.trust) return false;
   if (rule.shown && !rule.shown.every((id) => ctx.shown.includes(id))) return false;
   if (rule.ask && !rule.ask.every((group) => group.some((w) => ctx.text.includes(w)))) return false;
   if (rule.evidence && !rule.evidence.every((id) => id in ctx.evidence)) return false;
-  return Boolean(rule.always || rule.trust != null || rule.shown || rule.ask || rule.evidence);
+  return Boolean(rule.always || rule.trust != null || rule.shown || rule.ask || rule.evidence || rule.flags);
 }
 export function canSay(fact, ctx) {
   if (ctx.said.includes(fact.id)) return true;
@@ -189,10 +199,10 @@ export function saveSite(st) {
 }
 export function loadSite(def) {
   try {
-    const raw = localStorage.getItem(KEY + def.id);
+    const raw = localStorage.getItem(KEY + saveKeyOf(def));
     if (!raw) return null;
     const st = JSON.parse(raw);
-    if (!st || st.site !== def.id) return null;
+    if (!st || st.site !== saveKeyOf(def)) return null;
     const base = newSiteState(def), out = { ...base, ...st };
     // 예전 저장에는 이어받은 카드와 증거판이 없다. 빠진 것만 채운다.
     for (const [id, at] of Object.entries(base.evidence)) out.evidence[id] ??= at;
@@ -206,6 +216,53 @@ export function loadSite(def) {
 }
 export function clearSite(def) {
   try {
-    localStorage.removeItem(KEY + def.id);
+    localStorage.removeItem(KEY + saveKeyOf(def));
   } catch { /* 무시 */ }
+}
+
+// ── 장소 사이의 이동 ──
+// def.places: [{ id, site, name, sub, at:[x,y], when }]   def.routes: { "a|b": 분 }
+export const placeOf = (def, siteId) => (def.places || []).find((p) => p.site === siteId) || null;
+export function travelMinutes(def, a, b) {
+  if (a === b) return 0;
+  return def.routes?.[`${a}|${b}`] ?? def.routes?.[`${b}|${a}`] ?? 30;
+}
+// 갈 수 있는 곳: 알게 된 곳만 지도에 생긴다
+export function placesOpen(def, st) {
+  const here = placeOf(def, st.at);
+  return (def.places || []).filter((p) => lockOpen(p.when, st)).map((p) => ({ ...p, here: p === here, minutes: here ? travelMinutes(def, here.id, p.id) : 0 }));
+}
+// 떠난다: 시간이 가고, 다음 장소에 닿았다는 것을 적어 둔다
+export function travelTo(def, st, placeId) {
+  const here = placeOf(def, st.at), to = placesOpen(def, st).find((p) => p.id === placeId);
+  if (!to || to.here) return null;
+  st.minute += to.minutes;
+  st.arrived = { from: here?.name || "", minutes: to.minutes };
+  st.at = to.site;
+  st.flags.traveled = true;
+  return to;
+}
+
+// ── 다음 사건으로 넘겨주기 ──
+// 앞 사건에서 얻은 카드, 이은 선, 밑줄, 인물과의 사이를 다음 현장의 처음 상태에 얹는다.
+// 다음 현장이 모르는 카드는 넘기지 않는다. 시각은 뒤로 가지 않는다.
+export function carryInto(def, from) {
+  const st = newSiteState(def);
+  st.evidence = Object.fromEntries(Object.entries(from.evidence).filter(([id]) => def.evidence[id]));
+  st.statements = [...(from.statements || [])];
+  st.npc = JSON.parse(JSON.stringify(from.npc || {}));
+  st.flags = Object.fromEntries(Object.entries(from.flags || {}).filter(([k]) => !k.startsWith("trig_") && !k.startsWith("deadline_")));
+  const b = from.board || {};
+  st.board = { ...st.board, pos: { ...b.pos }, links: { ...b.links }, more: [...(b.more || [])], strip: [...(b.strip || [])], ded: { ...b.ded }, seen: [...(b.seen || [])], wrong: {} };
+  st.book = JSON.parse(JSON.stringify(from.book || { seen: {} }));
+  st.minute = Math.max(from.minute, def.start.minute);
+  st.carried = from.site;
+  return st;
+}
+export function loadSaved(key) {
+  try {
+    return JSON.parse(localStorage.getItem(KEY + key) || "null");
+  } catch {
+    return null;
+  }
 }

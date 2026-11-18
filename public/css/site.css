@@ -18,8 +18,7 @@ kbd { font: 600 11px/1 var(--font-ui); padding: 3px 6px; border-radius: 4px; bac
 .off { display: none !important; }
 
 #site { position: fixed; inset: 0; user-select: none; }
-.s-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
-.s-canvas:active { cursor: grabbing; }
+.s-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
 .s-loading { position: absolute; inset: 0; display: grid; place-content: center; font-family: var(--font-serif); color: var(--text-2); letter-spacing: 0.2em; z-index: 30; background: #000; }
 
 /* ── HUD ── */
@@ -41,6 +40,14 @@ kbd { font: 600 11px/1 var(--font-ui); padding: 3px 6px; border-radius: 4px; bac
 .s-hud.locked .s-dot { background: rgba(255, 255, 255, 0.7); }
 .s-dot[data-mode="on"] { width: 8px; height: 8px; margin: -4px; background: var(--pencil); box-shadow: 0 0 0 2px rgba(239, 231, 214, 0.5); }
 .s-dot[data-mode="off"] { opacity: 0; }
+/* 시선 안내: 마우스를 놓고 있을 때는 '누르면 둘러본다', 처음 잡았을 때는 '놓는 법'을 잠깐 */
+.s-lookhint { position: absolute; left: 50%; top: calc(50% + 26px); translate: -50% 0; pointer-events: none; font: 500 12px var(--font-ui); letter-spacing: 0.04em; color: rgba(239, 231, 214, 0.82); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); white-space: nowrap; }
+.s-lookhint span { position: absolute; left: 50%; top: 0; translate: -50% 0; display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 5px; border-radius: 999px; background: rgba(10, 12, 16, 0.5); opacity: 0; transition: opacity 0.35s; }
+.s-lookhint kbd { padding: 1px 7px; border: 1px solid rgba(239, 231, 214, 0.45); border-radius: 999px; font: 700 10.5px var(--font-ui); letter-spacing: 0.06em; }
+.s-hud.free .s-lookhint .free { opacity: 1; animation: s-lookhint 2.8s ease-in-out infinite; }
+.s-hud.lock-tip.locked .s-lookhint .held { opacity: 1; }
+@keyframes s-lookhint { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .s-hud.free .s-lookhint .free { animation: none; } }
 
 .s-prompt { position: absolute; left: 50%; bottom: 23%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 7px 14px 7px 9px; background: var(--paper); color: var(--paper-ink); border-radius: 3px; box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5); font-family: var(--font-serif); white-space: nowrap; }
 .s-prompt b { font-weight: 700; }

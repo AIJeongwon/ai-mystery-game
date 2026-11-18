@@ -79,9 +79,9 @@ test("현장 데이터: 가리키는 증거·열람·물건이 모두 있다", (
   for (const s of DEF.spots) if (s.inspect) assert.ok(DEF.inspects[s.inspect], `열람 ${s.inspect}`);
   for (const it of Object.values(DEF.items)) if (it.inspect) assert.ok(DEF.inspects[it.inspect], `열람 ${it.inspect}`);
   for (const id of DEF.start.items) assert.ok(DEF.items[id], `물건 ${id}`);
-  // 모든 증거는 얻을 길이 있다
+  // 모든 증거는 얻을 길이 있다. 프롤로그에서만 얻는 카드(carried)는 이어받아야 손에 있다 — 얻는 길은 tests/prologue.test.mjs가 본다.
   const reachable = new Set(refs);
-  assert.deepEqual([...ev].filter((id) => !reachable.has(id)), []);
+  assert.deepEqual([...ev].filter((id) => !reachable.has(id) && !DEF.evidence[id].carried), []);
   // 인물의 말: 규칙이 가리키는 증거, 대사, 발뺌
   for (const n of DEF.npcs) {
     assert.ok(n.deflect.length >= 2 && n.opening.length);
@@ -279,7 +279,8 @@ test("증거판 데이터: 잇기·추리·시간 띠가 가리키는 카드가 
     assert.equal(ev[id]?.kind, "추론", `${id}는 추론 쪽지여야 한다`);
     for (const f of [{ from: l.from, rel: l.rel }, ...(l.alt || [])]) {
       assert.ok(RELS[f.rel] && f.from.length === 2 && f.from.every((c) => ev[c]), `${id}: ${f.from}`);
-      if (f.rel === "time") assert.ok(ev[f.from[0]].at < ev[f.from[1]].at, `${id}: 앞뒤는 이른 것이 먼저다`);
+      // 시간 띠 바깥의 일(두 달 전의 모의고사)은 at이 없다. 그때는 손으로 적은 순서가 앞뒤다.
+      if (f.rel === "time" && f.from.every((c) => ev[c].at != null)) assert.ok(ev[f.from[0]].at < ev[f.from[1]].at, `${id}: 앞뒤는 이른 것이 먼저다`);
     }
     if (l.compare) assert.ok(l.from.every((c) => Array.isArray(ev[c].body)) && ev[l.from[0]].body.join(" ").includes(l.compare.target));
   }

@@ -177,7 +177,7 @@ export async function openInspect({ id, root, renderer, loader, def, idef, st, h
   window.addEventListener("keydown", onKey);
 
   // ── 한 프레임 ──
-  const v = new THREE.Vector3(), ndc = new THREE.Vector2(), ray = new THREE.Raycaster();
+  const v = new THREE.Vector3(), ndc = new THREE.Vector2(), ray = new THREE.Raycaster(), sheetPlane = new THREE.Plane();
   let raf = 0, last = performance.now();
   function frame(now) {
     raf = requestAnimationFrame(frame);
@@ -199,8 +199,15 @@ export async function openInspect({ id, root, renderer, loader, def, idef, st, h
     ndc.set((mouse.x / w) * 2 - 1, -(mouse.y / h) * 2 + 1);
     if (torch) {
       ray.setFromCamera(ndc, cam);
-      torch.position.copy(cam.position).add(new THREE.Vector3(radius * 0.08, -radius * 0.1, 0));
+      // 빛은 보통 눈 곁에서 나간다. 종이의 광택처럼 비스듬한 빛이 있어야 보이는 것은 소품이 빛의 자리를 정한다 (view.torchAt, 반지름 단위).
+      if (view.torchAt) torch.position.set(view.torchAt[0] * radius, view.torchAt[1] * radius, view.torchAt[2] * radius);
+      else torch.position.copy(cam.position).add(new THREE.Vector3(radius * 0.08, -radius * 0.1, 0));
       torch.target.position.copy(ray.ray.origin).addScaledVector(ray.ray.direction, radius * 3);
+      if (view.torchAt) {
+        // 빛이 눈과 다른 곳에 있으면, 마우스가 가리키는 종이 위의 점을 겨눈다 (누운 종이: 위쪽이 +Y)
+        sheetPlane.normal.set(0, 1, 0).applyQuaternion(pivot.quaternion);
+        ray.ray.intersectPlane(sheetPlane, torch.target.position);
+      }
     }
     pivot.updateMatrixWorld(true);
     for (const entry of details) {

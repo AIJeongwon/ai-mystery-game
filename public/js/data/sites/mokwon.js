@@ -2,6 +2,8 @@
 // 자리는 glb 안의 이름에서 읽는다(tools/3d/room12_layout.py). 여기에는 내용과 규칙만 적는다.
 // 시각은 분 단위, 0 = 금요일(D+1) 0시.
 
+import { PROLOGUE_CARDS } from "./suneung-cards.js";
+
 const FRI = 0, SAT = 1440, THU = -1440, WED = -2880; // 목요일이 수능 날(D), 수요일이 예비소집 날(D-1)
 
 export const MOKWON_ROOM12 = {
@@ -20,7 +22,7 @@ export const MOKWON_ROOM12 = {
   },
   sketch: ["시험이 끝난 교실. 책상마다 수험번호 스티커가 아직 붙어 있다.", "배수정 선생이 문을 열어 주고 교탁 옆에 선다. \"스물네 명이 여기서 봤어요.\""],
   // 해의 방향·색·세기는 tools/3d/bake_room12.py의 SUN_*과 같아야 한다 (three.js 좌표: x, 위, -y).
-  light: { sun: { dir: [-0.35, 0.18, 1], color: 0xffa861, intensity: 4.0 }, sunset: 17.4, sky: 0xcfd9e6, ground: 0x6b6257, ambient: 0.4, exposure: 0.82, lamp: 1.7, skyBg: 0xd9b48c },
+  light: { sun: { dir: [-0.35, 0.18, 1], color: 0xffa861, intensity: 4.0 }, sunset: 17.4, sunFrom: 12, sky: 0xcfd9e6, ground: 0x6b6257, ambient: 0.4, exposure: 0.82, lamp: 1.7, skyBg: 0xd9b48c },
   // 구운 조명 (사실화 공간에서만 쓴다). range는 bake_room12.py의 RANGE와 같아야 한다.
   lightmap: {
     meshes: ["static", "tile24"], exposure: 1.0, nightGain: 0.35,
@@ -62,6 +64,8 @@ export const MOKWON_ROOM12 = {
 
   evidence: {
     // ── 프롤로그에서 이어받은 것 (carried) ──
+    // 프롤로그에서만 얻는 카드. 프롤로그를 거쳐 왔을 때만 손에 있다 (처음부터 열면 start.evidence의 여덟 장뿐).
+    ...Object.fromEntries(Object.entries(PROLOGUE_CARDS).map(([id, c]) => [id, { ...c, carried: true }])),
     P1: {
       title: "일간 세한의 기사", kind: "기사", carried: true, at: THU + 19 * 60, source: "일간 세한 · 목요일 19시",
       head: "이번 수능 철저한 감독 이행 끝에 시험 전 AI부정행위 전부 검거.",
@@ -110,6 +114,8 @@ export const MOKWON_ROOM12 = {
   links: {
     I1: { from: ["P4", "P5"], rel: "contra", alt: [{ from: ["P4", "P7"], rel: "contra" }] },
     I4: { from: ["P8", "P2"], rel: "contra" },
+    I0: { from: ["P9", "P3"], rel: "time" }, //  프롤로그의 연습용 연결. 거기서 잇지 않았다면 여기서도 이을 수 있다.
+    I3: { from: ["P6", "P10"], rel: "same" },
     // 원문으로 이으면 두 문서가 겹쳐진다. 지워진 구절을 직접 짚어야 쪽지가 된다.
     I2: { from: ["P2", "P1"], rel: "source", compare: { target: "시험 중 부정행위 여부는", prompt: "기사는 보도자료를 어떻게 옮겼나. 가장 무거운 차이 하나를 짚는다.", miss: "꾸밈이 달라졌을 뿐이다. 덧붙인 말보다 사라진 말을 본다." } },
     I5: { from: ["C1", "C2"], rel: "same", close: true },

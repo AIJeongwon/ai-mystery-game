@@ -103,6 +103,7 @@ export function webTerms(def, st) {
     had.add(k);
     out.push({ text, from });
   };
+  for (const t of W.terms || []) push(t, W.termsFrom || "처음부터 아는 말"); // 사건을 시작할 때 이미 손에 있는 말
   for (const id of Object.keys(st.evidence)) for (const t of def.evidence[id]?.terms || []) push(t, def.evidence[id].title);
   for (const key of Object.keys(r.web.seen)) {
     const p = W.pages[key];
