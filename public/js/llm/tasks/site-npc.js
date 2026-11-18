@@ -14,7 +14,7 @@ export const SITE_NPC_SCHEMA = S.obj({
 export function siteNpcSystem(def, npc, facts, st) {
   const held = facts.filter((f) => !st.npc[npc.id]?.said.includes(f.id));
   const said = facts.filter((f) => st.npc[npc.id]?.said.includes(f.id));
-  const found = Object.keys(st.evidence).map((id) => def.evidence[id]).filter((e) => e && e.kind !== "진술").map((e) => `- ${e.title}`);
+  const found = Object.keys(st.evidence).map((id) => def.evidence[id]).filter((e) => e && e.kind !== "진술" && e.kind !== "추론" && !e.carried).map((e) => `- ${e.title}`);
   return `당신은 추리 게임 「기정사실」 속 인물을 연기한다. 아래 인물이 되어, 눈앞에 선 기자의 물음에 답한다.
 
 [인물]

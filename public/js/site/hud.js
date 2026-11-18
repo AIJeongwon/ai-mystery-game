@@ -1,4 +1,4 @@
-// 현장의 화면 글자 — 가운데 점, 장소와 시각, 지금의 물음, 살펴보기 문장, 수첩.
+// 현장의 화면 글자 — 가운데 점, 장소와 시각, 지금의 물음, 살펴보기 문장, 허리띠(도구·수첩·증거판).
 // 사실적인 3D 위에 '기자의 수첩'이라는 종이 한 겹을 얹는다: 명조체, 종이색, 붉은 색연필.
 
 export function el(spec, props, ...kids) {
@@ -45,11 +45,11 @@ export function makeHud(root) {
   const belt = el("div.s-belt");
   const sketch = el("div.s-sketch.off");
   const bubble = el("div.s-bubble.off");
-  const notebook = el("div.s-notebook.off");
+  const flash = el("div.s-flash");
   const stats = el("div.s-stats.off");
   const tool = el("div.s-tool.off");
   const veil = el("div.s-veil");
-  const layer = el("div.s-hud", el("div.s-top", el("div.s-where", place, clock), question), dot, prompt, caption, toasts, belt, sketch, bubble, tool, notebook, stats, veil);
+  const layer = el("div.s-hud", el("div.s-top", el("div.s-where", place, clock), question), dot, prompt, caption, toasts, belt, sketch, bubble, tool, stats, flash, veil);
   root.append(layer);
 
   const hud = { layer, tool, busy: false };
@@ -75,6 +75,7 @@ export function makeHud(root) {
     question.replaceChildren();
     if (!q) return;
     question.append(el("span.s-q-eyebrow", "지금의 물음"), el("span.s-q-text", q.text));
+    if (q.sub) question.append(el("span.s-q-sub", q.sub));
     if (total) question.append(el("span.s-q-dots", "●".repeat(have) + "○".repeat(total - have)));
     if (changed) {
       question.classList.remove("flash");
@@ -125,11 +126,26 @@ export function makeHud(root) {
     setTimeout(() => t.classList.add("out"), ms);
     setTimeout(() => t.remove(), ms + 500);
   };
-  hud.evidence = (id, ev) => {
-    const t = el("div.s-toast.evidence", el("span.s-ev-no", id), el("div", el("b", ev.title), el("small", `${ev.kind} · 수첩에 적었다`)));
+  // 얻은 것: 사진이 있으면 사진과 함께. 사라질 때는 허리띠의 증거판 쪽으로 날아간다.
+  hud.evidence = (id, ev, photo) => {
+    const note = ev.kind === "추론";
+    const t = el(`div.s-toast.evidence${note ? ".note" : ""}`,
+      photo ? el("img", { src: photo, alt: "" }) : null,
+      el("span.s-ev-no", id),
+      el("div", el("b", ev.title), el("small", note ? "추론 · 증거판에 쪽지가 붙었다" : `${ev.kind} · 수첩에 적고 판에 꽂았다`)));
     toasts.append(t);
-    setTimeout(() => t.classList.add("out"), 4200);
-    setTimeout(() => t.remove(), 4700);
+    setTimeout(() => {
+      const to = belt.querySelector('[data-k="board"]')?.getBoundingClientRect(), from = t.getBoundingClientRect();
+      if (to && from.width) t.style.translate = `${Math.round(to.left + to.width / 2 - from.left - from.width / 2)}px ${Math.round(to.top - from.top)}px`;
+      t.classList.add("fly");
+    }, 4200);
+    setTimeout(() => t.remove(), 4850);
+  };
+  // 사진을 찍는 순간
+  hud.flash = () => {
+    flash.classList.remove("on");
+    void flash.offsetWidth;
+    flash.classList.add("on");
   };
 
   hud.sketch = async (lines) => {
@@ -153,13 +169,17 @@ export function makeHud(root) {
     bubble.style.visibility = visible ? "visible" : "hidden";
   };
 
-  hud.setBelt = (items, active, holding) => {
+  // 허리띠: 도구, 들고 있는 것, 소지품, 수첩, 증거판. 수첩과 증거판은 눌러서도 연다.
+  // marks: { book: 새로 적힌 줄 수, board: 새 카드 수, nudge: 지금 물음이 증거판에서 풀리는가 }
+  hud.onBelt = null;
+  hud.setBelt = (items, active, holding, marks = {}) => {
+    const link = (k, key, title, n, nudge) => el(`div.s-belt-item.dim.link${nudge ? ".nudge" : ""}`, { "data-k": k, onclick: () => hud.onBelt?.(k) }, el("kbd", key), title, n ? el("span.s-badge", String(n)) : null);
     belt.replaceChildren(...[
       ...items.map((it) => el(`div.s-belt-item${active === it.tool ? ".on" : ""}`, it.key ? el("kbd", it.key) : null, it.title)),
       holding ? el("div.s-belt-item.holding", `들고 있다: ${holding}`) : null,
       el("div.s-belt-item.dim", el("kbd", "I"), "소지품"),
-      el("div.s-belt-item.dim", el("kbd", "Tab"), "수첩"),
-      el("div.s-belt-item.dim", el("kbd", "H"), "조작"),
+      link("book", "Tab", "수첩", marks.book, false),
+      link("board", "B", "증거판", marks.board, marks.nudge),
     ].filter(Boolean));
   };
 
@@ -183,43 +203,6 @@ export function makeHud(root) {
   };
   // 휴대폰 화면이 차지하는 자리 (캔버스 좌표). 엔진이 여기에 두 번째 시점을 그린다.
   hud.phoneRect = () => tool.querySelector(".s-phone-cam")?.getBoundingClientRect() || null;
-
-  // ── 수첩 (간이): 물음, 얻은 것, 시한. 본격적인 수첩은 다음 단계에서 만든다 ──
-  hud.notebookOpen = () => !notebook.classList.contains("off");
-  hud.toggleNotebook = (def, st, extra) => {
-    if (hud.notebookOpen()) return notebook.classList.add("off"), false;
-    const ev = Object.keys(st.evidence).sort((a, b) => st.evidence[a] - st.evidence[b]);
-    notebook.classList.remove("help");
-    notebook.replaceChildren(
-      el("div.s-nb-page",
-        el("h3", "물음"),
-        el("p.s-nb-q", extra.question?.text || "—"),
-        extra.deadline ? el("p.s-nb-deadline", `시한 · ${extra.deadline}`) : null,
-        el("h3", `얻은 것 ${ev.length}`),
-        ev.length ? el("ul", ev.map((id) => el("li", el("i", id), el("div", el("b", def.evidence[id]?.title || id), el("span", def.evidence[id]?.text || ""))))) : el("p.dim", "아직 없다."),
-        st.statements.length ? el("h3", "밑줄") : null,
-        st.statements.length ? el("ul", st.statements.map((s) => el("li", el("i", "진술"), el("div", el("b", s.who), el("span", `"${s.text}"`))))) : null,
-        el("p.s-nb-foot", "수첩을 펼친 동안 시계는 멈춘다 · Tab으로 닫는다"),
-      ),
-    );
-    notebook.classList.remove("off");
-    return true;
-  };
-
-  hud.help = () => {
-    const open = notebook.classList.contains("help") && hud.notebookOpen();
-    notebook.classList.toggle("help", !open);
-    if (open) return notebook.classList.add("off");
-    notebook.replaceChildren(el("div.s-nb-page",
-      el("h3", "조작"),
-      el("ul.s-keys",
-        [["W A S D", "걷기 (Shift: 빠르게)"], ["마우스 끌기", "둘러보기"], ["바닥 누르기", "그 자리로 걸어간다"], ["붉은 동그라미 누르기 · E", "살펴본다"],
-          ["F", "휴대폰 카메라"], ["G", "개조된 펜"], ["I", "가진 물건 살펴보기"], ["Tab", "수첩"], ["L", "마우스 시점 고정"], ["Esc", "닫기 · 물러나기"]]
-          .map(([k, v]) => el("li", el("i", k), el("div", el("span", v))))),
-      el("p.s-nb-foot", "살펴보기와 대화에는 게임 속 시간이 든다. 걷는 데는 들지 않는다."),
-    ));
-    notebook.classList.remove("off");
-  };
 
   hud.setStats = (text) => {
     stats.classList.toggle("off", !text);

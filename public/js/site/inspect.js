@@ -7,7 +7,7 @@ import { buildProp } from "./props.js";
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-export async function openInspect({ id, root, renderer, loader, def, idef, st, hud, onGain, onBark, choose }) {
+export async function openInspect({ id, root, renderer, loader, def, idef, st, hud, onGain, onBark, choose, snapAt }) {
   const seenKey = (d) => `${id}.${d}`;
   const seen = (d) => Boolean(st.seen[seenKey(d)]);
 
@@ -93,8 +93,14 @@ export async function openInspect({ id, root, renderer, loader, def, idef, st, h
     const { d } = entry;
     const first = !seen(d.id);
     st.seen[seenKey(d.id)] = (st.seen[seenKey(d.id)] || 0) + 1;
+    // 누른 순간, 빛이 닿아 있는 그 자리를 찍어 둔다 (증거판의 사진이 된다)
+    let shot = null;
+    if (first && d.gives?.evidence && entry.node && snapAt) {
+      const p = entry.node.getWorldPosition(new THREE.Vector3()).project(cam);
+      shot = snapAt(p.x * 0.5 + 0.5, -p.y * 0.5 + 0.5);
+    }
     await say(d.text);
-    if (first && d.gives) onGain(d.gives);
+    if (first && d.gives) onGain(d.gives, shot);
     if (first) onBark?.(d.bark);
     if (d.choice && !(d.choice.id in st.choices)) {
       talking = true;

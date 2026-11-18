@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { MOKWON_ROOM12 as DEF, SITES } from "../public/js/data/sites/mokwon.js";
 import { newSiteState, lockOpen, spotStatus, useSpot, apply, nodeVisible, currentQuestion, questionProgress, runDeadlines, nextDeadline, fmtClock, daylight, sentences, sayable, acceptNpcReply, ruleNpcReply } from "../public/js/site/state.js";
 import { makeNav, setBoxEnabled, blocked, step, findPath } from "../public/js/site/nav.js";
+import { RELS, REL_ORDER, boardOf, ownedCards, tryLink, diffWords, compareView, pickCompare, stripAdd, stripRemove, stripView, stripX, dedOpen, dedSlots, dedState, setSlot, checkDeduction, dedSentence, questionsPage, factsPage, pullFact, peoplePage, moodOf, primeBook, bookUnseen, markBookSeen, bookKeys, boardUnseen, hintsLeft, ponder, PONDER_MINUTES } from "../public/js/site/reason.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const spot = (id) => DEF.spots.find((s) => s.id === id);
@@ -18,6 +19,11 @@ function look(st, id) {
   const s = spot(id);
   assert.notEqual(spotStatus(s, st), "hidden", `${id}가 아직 보이면 안 된다`);
   const fresh = useSpot(st, s);
+  settle(st);
+  return fresh;
+}
+// 조건이 맞은 일을 일으킨다 (엔진의 runTriggers와 같다)
+function settle(st) {
   for (const tr of DEF.triggers || []) {
     if (!st.flags[`trig_${tr.id}`] && lockOpen(tr.when, st)) {
       st.flags[`trig_${tr.id}`] = true;
@@ -25,8 +31,18 @@ function look(st, id) {
     }
   }
   runDeadlines(DEF, st);
-  return fresh;
 }
+// 증거판에서 두 장을 잇는다
+function link(st, a, b, rel) {
+  const res = tryLink(DEF, st, a, b, rel);
+  settle(st);
+  return res;
+}
+const owning = (...ids) => {
+  const st = newSiteState(DEF);
+  apply(st, { evidence: ids });
+  return st;
+};
 function examine(st, inspectId, detailId) {
   const d = DEF.inspects[inspectId].details.find((x) => x.id === detailId);
   assert.ok((d.needs || []).every((n) => st.seen[`${inspectId}.${n}`]), `${detailId}는 먼저 볼 것이 있다`);
@@ -46,7 +62,7 @@ test("현장 데이터: 자리 이름이 블록아웃 배치와 맞는다", () =
 
 test("현장 데이터: 가리키는 증거·열람·물건이 모두 있다", () => {
   const ev = new Set(Object.keys(DEF.evidence));
-  const refs = [...DEF.start.evidence, ...DEF.questions.flatMap((q) => q.cards)];
+  const refs = [...DEF.start.evidence, ...DEF.questions.flatMap((q) => q.cards), ...Object.keys(DEF.links), ...DEF.spots.map((s) => s.card).filter(Boolean)];
   const effects = [...DEF.spots.map((s) => s.gives), ...DEF.deadlines.map((d) => d.effect), ...DEF.triggers.map((t) => t.effect)];
   for (const ins of Object.values(DEF.inspects)) {
     for (const d of ins.details) {
@@ -78,7 +94,7 @@ test("현장 데이터: 가리키는 증거·열람·물건이 모두 있다", (
 
 test("현장: LLM 없이 교실 조사를 끝까지 따라갈 수 있다", () => {
   const st = newSiteState(DEF);
-  assert.deepEqual(Object.keys(st.evidence), ["P7", "P8"]);
+  assert.deepEqual(Object.keys(st.evidence), ["P2", "P1", "P4", "P5", "P7", "P8", "I1", "I4"], "프롤로그에서 얻은 것을 이어받는다");
   assert.equal(currentQuestion(DEF, st).id, "q_seat");
   assert.equal(spotStatus(spot("ceiling24"), st), "hidden", "위를 볼 까닭이 생기기 전에는 천장에 표시가 없다");
   assert.equal(spotStatus(spot("ladder"), st), "hidden");
@@ -87,7 +103,12 @@ test("현장: LLM 없이 교실 조사를 끝까지 따라갈 수 있다", () =>
   assert.deepEqual(look(st, "desk24").evidence, ["C1"]);
   assert.ok(!st.flags.look_up, "가루만으로는 아직 올려다보지 않는다");
   look(st, "floor_ladder");
-  assert.ok(st.flags.look_up, "가루와 사다리 자국이 모이면 시선이 올라간다");
+  assert.ok(!st.flags.look_up, "두 장을 모은 것만으로는 올려다보지 않는다. 판에서 이어야 한다");
+  assert.equal(currentQuestion(DEF, st).id, "q_link");
+  assert.equal(link(st, "C1", "C2", "contra").kind, "rel", "이어지지만 그 부호가 아니다");
+  const made = link(st, "C1", "C2", "same");
+  assert.ok(made.ok && made.id === "I5" && made.close, "잇는 순간 판이 덮이고 눈길이 위로 간다");
+  assert.ok(st.flags.look_up && "I5" in st.evidence);
   assert.equal(currentQuestion(DEF, st).id, "q_above");
   look(st, "floor_old");
   look(st, "desk24_under");
@@ -122,9 +143,22 @@ test("현장: LLM 없이 교실 조사를 끝까지 따라갈 수 있다", () =>
   const pull = card.choice.options.find((o) => o.id === "pull");
   apply(st, pull.effect);
   assert.ok("C11" in st.evidence && st.flags.card_pulled);
-  assert.equal(currentQuestion(DEF, st).id, "q_next");
+  assert.equal(currentQuestion(DEF, st).id, "q_night", "이제 그날 밤을 문장으로 맞춘다");
   look(st, "ladder_down");
   assert.ok(!st.flags.on_ladder);
+  // 전날 밤 누가 들어올 수 있었는지 묻는다 (규칙 모드: 사다리 자국을 내민다)
+  const said = ruleNpcReply(bae, { trust: 60, shown: ["C2"], text: "", evidence: st.evidence, said: ["b1"], turn: 1 });
+  assert.deepEqual(said.revealed, ["b4"]);
+  apply(st, { evidence: [bae.facts.find((f) => f.id === "b4").gives], minutes: 4 });
+  assert.equal(link(st, "C9", "C29", "time").kind, "order", "앞뒤는 먼저 일어난 일에서 나중 일로 긋는다");
+  assert.equal(link(st, "C29", "C9", "time").id, "I12");
+  const ded = dedOpen(DEF, st)[0];
+  assert.deepEqual(dedSlots(ded, st), ["where", "who", "up", "on"]);
+  for (const [slot, card] of [["where", "I5"], ["who", "I12"], ["up", "C9"], ["on", "C10"]]) assert.ok(setSlot(DEF, st, "night", slot, card));
+  const solved = checkDeduction(DEF, st, "night");
+  assert.ok(solved.ok && st.flags.deduced_night);
+  assert.equal(solved.sentence, "두뇌는 24번 자리 위 천장에 있었다. 봉인된 방에 시설 쪽의 '오'가 들어와 시험 전날 밤 9시 40분에 그것을 올리고, 시험 날 새벽 5시 40분에 켰다.");
+  assert.equal(currentQuestion(DEF, st).id, "q_next");
   assert.ok(st.minute - DEF.start.minute <= 90, "첫 조사는 한 시간 반 안에 끝난다");
   assert.equal(nextDeadline(DEF, st), null, "텍스를 열었으면 새벽의 회수는 일어나지 않는다");
 });
@@ -237,4 +271,182 @@ test("현장 걷기: 가구를 돌아서 가고, 막힌 곳에는 들어가지 �
   // 막힌 곳을 누르면 가장 가까운 빈 자리까지 간다
   const q = findPath(nav, 0, -2, 0, 0);
   assert.ok(q && !blocked(nav, ...q[q.length - 1]));
+});
+
+test("증거판 데이터: 잇기·추리·시간 띠가 가리키는 카드가 모두 있다", () => {
+  const ev = DEF.evidence;
+  for (const [id, l] of Object.entries(DEF.links)) {
+    assert.equal(ev[id]?.kind, "추론", `${id}는 추론 쪽지여야 한다`);
+    for (const f of [{ from: l.from, rel: l.rel }, ...(l.alt || [])]) {
+      assert.ok(RELS[f.rel] && f.from.length === 2 && f.from.every((c) => ev[c]), `${id}: ${f.from}`);
+      if (f.rel === "time") assert.ok(ev[f.from[0]].at < ev[f.from[1]].at, `${id}: 앞뒤는 이른 것이 먼저다`);
+    }
+    if (l.compare) assert.ok(l.from.every((c) => Array.isArray(ev[c].body)) && ev[l.from[0]].body.join(" ").includes(l.compare.target));
+  }
+  assert.deepEqual(REL_ORDER.map((r) => RELS[r].key), ["1", "2", "3", "4"]);
+  for (const m of DEF.misses) assert.ok(m.pair.every((c) => ev[c]) && m.text);
+  for (const [id, l] of Object.entries(DEF.start.links)) assert.ok(DEF.start.evidence.includes(id) && DEF.start.evidence.includes(l.a) && DEF.start.evidence.includes(l.b));
+  for (const d of DEF.deductions) {
+    for (const parts of [d.parts, ...(d.variants || []).map((v) => v.parts)]) for (const p of parts) if (p.slot) assert.ok(d.slots[p.slot], p.slot);
+    for (const sl of Object.values(d.slots)) for (const c of [...Object.keys(sl.accept), ...Object.keys(sl.near || {})]) assert.ok(ev[c], c);
+  }
+  for (const b of DEF.timeline.bands) assert.ok(ev[b.card].at === b.from && b.from < b.to);
+  for (const e of Object.values(ev)) if (e.refutedBy) assert.ok(ev[e.refutedBy]);
+  for (const p of DEF.people) assert.ok(p.npc ? DEF.npcs.some((n) => n.id === p.npc) : p.name && p.role);
+  for (const s of DEF.spots) if (s.card) assert.ok(s.note && ev[s.card], `${s.id}: 판으로 꺼낼 관찰에는 수첩에 적을 말이 있어야 한다`);
+  for (const q of DEF.questions) for (const h of q.hints || []) assert.ok(typeof h === "string" && h.length > 8);
+});
+
+test("증거판: 틀린 잇기는 까닭만 알려 주고, 같은 쌍을 세 번 틀리면 실마리가 열린다", () => {
+  const st = owning("C1", "C2", "C3", "C4");
+  assert.equal(boardOf(st).links.I1.rel, "contra", "이어받은 선이 판에 그어져 있다");
+  assert.equal(tryLink(DEF, st, "P4", "P5", "same").kind, "dup");
+  assert.equal(tryLink(DEF, st, "C1", "C9", "same").kind, "none", "갖지 않은 카드는 이을 수 없다");
+  const t0 = st.minute;
+  const miss = tryLink(DEF, st, "C1", "C4", "same");
+  assert.ok(!miss.ok && miss.kind === "none" && miss.text.includes("상판"), "까닭을 적어 둔 쌍은 그 까닭을 말한다");
+  assert.equal(tryLink(DEF, st, "C3", "C4", "time").text, RELS.time.miss);
+  assert.equal(st.minute, t0, "틀려도 시간은 가지 않는다");
+  assert.equal(currentQuestion(DEF, st).id, "q_link");
+  assert.equal(tryLink(DEF, st, "C2", "C3", "same").hint, false);
+  assert.equal(tryLink(DEF, st, "C3", "C2", "contra").hint, false, "순서를 바꿔도 같은 쌍이다");
+  assert.equal(tryLink(DEF, st, "C2", "C3", "time").hint, true);
+  assert.deepEqual(questionsPage(DEF, st).list.find((x) => x.now).hints, [DEF.questions[1].hints[0]]);
+  assert.ok(!("I5" in st.evidence));
+});
+
+test("증거판: 같은 쪽지에 닿는 다른 길도 받아 준다", () => {
+  const st = owning("C3", "C17");
+  look(st, "notice");
+  assert.ok(pullFact(DEF, st, "N1").evidence.includes("N1"));
+  assert.equal(pullFact(DEF, st, "N1"), null, "한 번만 꺼낸다");
+  assert.equal(pullFact(DEF, st, "N2"), null, "보지 않은 것은 꺼낼 수 없다");
+  const first = tryLink(DEF, st, "N1", "C3", "contra");
+  assert.ok(first.ok && first.id === "I6" && !first.again);
+  const second = tryLink(DEF, st, "C17", "C3", "same");
+  assert.ok(second.ok && second.again && second.fresh.evidence.length === 0);
+  assert.equal(boardOf(st).more.length, 1);
+  assert.equal(tryLink(DEF, st, "C3", "C17", "same").kind, "dup");
+});
+
+test("판본 비교: 기사가 지운 문장을 짚어야 쪽지가 된다", () => {
+  assert.deepEqual(diffWords(["가", "나", "다"], ["가", "라", "다", "마"]).map((o) => o.op), ["same", "del", "add", "same", "add"]);
+  const st = newSiteState(DEF);
+  const open = tryLink(DEF, st, "P1", "P2", "source");
+  assert.deepEqual(open, { ok: true, compare: "I2" }, "원문으로 이으면 두 문서를 겹쳐 본다");
+  assert.ok(!("I2" in st.evidence));
+  const view = compareView(DEF, "I2");
+  assert.deepEqual([view.a, view.b], ["P2", "P1"]);
+  const text = (side) => view[side].filter((t) => !t.br).map((t) => t.text).join(" ");
+  assert.equal(text("left"), DEF.evidence.P2.body.join(" "));
+  assert.equal(text("right"), DEF.evidence.P1.body.join(" "));
+  const target = view.runs.filter((r) => r.text.includes("시험 중 부정행위 여부는"));
+  assert.equal(target.length, 1);
+  assert.equal(target[0].side, "left", "지워진 문장은 원문 쪽에만 있다");
+  const other = view.runs.find((r) => r !== target[0]);
+  const miss = pickCompare(DEF, st, "I2", other.id);
+  assert.ok(!miss.ok && miss.text === DEF.links.I2.compare.miss);
+  const hit = pickCompare(DEF, st, "I2", target[0].id);
+  assert.ok(hit.ok && hit.id === "I2" && "I2" in st.evidence);
+  assert.deepEqual(boardOf(st).links.I2, { a: "P2", b: "P1", rel: "source" });
+});
+
+test("시간 띠: 봉인된 시간 안에 무언가 놓이면 한 번 알아챈다", () => {
+  const st = owning("C9", "C10", "C29", "C1");
+  assert.equal(stripAdd(DEF, st, "C1").ok, false, "시각이 없는 카드는 올릴 수 없다");
+  assert.deepEqual(stripAdd(DEF, st, "C9"), { ok: true, insight: null });
+  assert.equal(stripAdd(DEF, st, "C9").ok, false);
+  assert.equal(stripView(DEF, st).bands.length, 0, "봉인 진술을 올리기 전에는 띠가 없다");
+  assert.equal(stripAdd(DEF, st, "C29").insight, DEF.timeline.bands[0].note);
+  assert.equal(stripAdd(DEF, st, "C10").insight, null, "두 번 말하지 않는다");
+  const view = stripView(DEF, st);
+  assert.deepEqual(view.items.map((i) => [i.id, i.inside]), [["C9", true], ["C29", false], ["C10", true]]);
+  assert.ok(view.marks.length === 1 && view.blocks.length === 5);
+  const x = (id) => stripX(view, DEF.evidence[id].at);
+  assert.ok(0 < x("C29") && x("C29") < x("C9") && x("C9") < x("C10") && x("C10") < stripX(view, view.blocks[1].from) && stripX(view, view.now) < 1);
+  stripRemove(st, "C29");
+  assert.ok(stripView(DEF, st).items.every((i) => !i.inside));
+});
+
+test("빈칸 추리: 틀리면 까닭을 듣고 30분이 흐른다", () => {
+  const st = owning("C1", "C2", "C5", "C7", "C9", "C10", "C29");
+  assert.equal(dedOpen(DEF, st).length, 0, "텍스를 열기 전에는 원고지가 비어 있다");
+  apply(st, { flags: ["tile_open", "card_pulled"] });
+  tryLink(DEF, st, "C1", "C2", "same");
+  tryLink(DEF, st, "C29", "C10", "time");
+  assert.ok("I12" in st.evidence, "전원 기록으로도 봉인 뒤의 손에 닿는다");
+  assert.equal(checkDeduction(DEF, st, "night").incomplete, true);
+  assert.equal(setSlot(DEF, st, "night", "where", "C8"), false, "갖지 않은 카드는 끼울 수 없다");
+  setSlot(DEF, st, "night", "where", "C5");
+  setSlot(DEF, st, "night", "who", "C9");
+  setSlot(DEF, st, "night", "up", "C10");
+  setSlot(DEF, st, "night", "on", "C10");
+  assert.equal(dedState(st, "night").slots.up, undefined, "한 카드는 한 칸에만 들어간다");
+  setSlot(DEF, st, "night", "up", "C29");
+  const t0 = st.minute;
+  const wrong = checkDeduction(DEF, st, "night");
+  assert.ok(!wrong.ok && wrong.minutes === 30 && st.minute === t0 + 30);
+  assert.ok(wrong.slots.on.ok && !wrong.slots.where.ok && wrong.slots.who.text.includes("봉인") && wrong.slots.up.text.includes("잠근"));
+  assert.ok(!st.flags.deduced_night);
+  for (const [slot, card] of [["where", "I5"], ["who", "I12"], ["up", "C9"]]) setSlot(DEF, st, "night", slot, card);
+  assert.ok(checkDeduction(DEF, st, "night").ok);
+  assert.equal(setSlot(DEF, st, "night", "where", "C5"), false, "맞춘 문장은 고치지 않는다");
+  assert.ok(checkDeduction(DEF, st, "night").already);
+  // 장치를 놓친 길: 켠 시각의 칸이 없다
+  const late = owning("C1", "C2", "C8", "C9", "C29");
+  apply(late, { flags: ["tile_open", "device_gone"] });
+  assert.equal(currentQuestion(DEF, late).id, "q_night");
+  tryLink(DEF, late, "C2", "C1", "same");
+  tryLink(DEF, late, "C29", "C9", "time");
+  const ded = dedOpen(DEF, late)[0];
+  assert.deepEqual(dedSlots(ded, late), ["where", "who", "up"]);
+  for (const [slot, card] of [["where", "I5"], ["who", "I12"], ["up", "C9"]]) setSlot(DEF, late, "night", slot, card);
+  assert.ok(checkDeduction(DEF, late, "night").ok);
+  assert.ok(dedSentence(DEF, ded, late).endsWith("켠 시각은 아직 모른다."));
+});
+
+test("수첩: 물음·사실·인물 쪽에 적히는 것", () => {
+  const st = newSiteState(DEF);
+  st.npc.bae = { trust: 60, said: [], turns: 0, log: [], chat: [] };
+  primeBook(DEF, st);
+  assert.deepEqual(bookUnseen(DEF, st), { q: 1, facts: 0, people: 0, total: 1 }, "이어받은 것은 이미 적혀 있고, 첫 물음만 새것이다");
+  assert.equal(boardUnseen(st), 0);
+  markBookSeen(st, bookKeys(DEF, st).q);
+  assert.equal(bookUnseen(DEF, st).total, 0);
+  // 사실: 이어받은 것과 이 방에서 본 것을 가른다
+  let facts = factsPage(DEF, st);
+  assert.deepEqual(facts.map((g) => g.title), ["앞서 알아낸 것", "판에서 이은 것"]);
+  const mark = (id) => facts.flatMap((g) => g.items).find((i) => i.id === id)?.mark;
+  assert.deepEqual([mark("P4"), mark("P5"), mark("P7"), mark("I1")], ["false", "heard", "seen", "note"], "의혹 글은 이미 거짓으로 드러났다");
+  look(st, "desk24");
+  look(st, "speaker");
+  facts = factsPage(DEF, st);
+  const here = facts.find((g) => g.title === DEF.title).items;
+  assert.deepEqual(here.map((i) => [i.id || i.spot, i.pull || null]), [["C1", null], ["speaker", "N2"]]);
+  assert.deepEqual(bookUnseen(DEF, st), { q: 0, facts: 2, people: 0, total: 2 });
+  assert.equal(boardUnseen(st), 1, "새 카드가 판에 꽂혔다");
+  pullFact(DEF, st, "N2");
+  assert.ok(factsPage(DEF, st).find((g) => g.title === DEF.title).items.find((i) => i.spot === "speaker").pulled);
+  // 물음: 가진 카드만 이름이 보인다. 실마리는 시간을 들여 청한다
+  const now = questionsPage(DEF, st).list.find((x) => x.now);
+  assert.deepEqual(now.cards.map((c) => c.owned), [true, false, false, false]);
+  assert.equal(hintsLeft(DEF, st), 1);
+  const t0 = st.minute;
+  assert.deepEqual(ponder(DEF, st), { ok: true, minutes: PONDER_MINUTES });
+  assert.equal(st.minute, t0 + PONDER_MINUTES);
+  assert.equal(ponder(DEF, st).ok, false, "실마리가 다 떨어지면 시간도 가지 않는다");
+  assert.equal(st.minute, t0 + PONDER_MINUTES);
+  // 인물: 서명의 주인은 점검표를 본 뒤에 생긴다. 믿음은 숫자가 아니라 몸짓으로 적는다
+  assert.deepEqual(peoplePage(DEF, st).map((p) => p.id), ["bae", "dohyeon"]);
+  apply(st, { evidence: ["C3", "C9"] });
+  st.statements.push({ id: "bae.0.0", who: "배수정", text: "그 학생 안경은 제가 직접 봤어요.", minute: st.minute });
+  const people = peoplePage(DEF, st);
+  assert.ok(people.find((p) => p.id === "oh").unknown);
+  const b = people.find((p) => p.id === "bae");
+  assert.equal(b.mood, moodOf(60));
+  assert.equal(b.said.length, 1);
+  assert.ok(b.unasked.some((u) => u.includes("책상의 옛 자국")), "내밀어 보지 않은 증거를 일러 준다");
+  assert.ok(!b.unasked.some((u) => u.includes("전날 밤")), "실마리가 될 증거를 얻기 전에는 일러 주지 않는다");
+  assert.notEqual(moodOf(30), moodOf(80));
+  assert.deepEqual(ownedCards(newSiteState(DEF)).slice(0, 3), ["I1", "I4", "P1"], "같은 때 얻은 것은 이름순이다");
 });

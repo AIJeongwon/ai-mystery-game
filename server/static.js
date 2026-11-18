@@ -39,6 +39,7 @@ const VENDOR = [
   ["/vendor/world-50m.json", path.join(NM, "world-atlas", "countries-50m.json")],
   ["/vendor/pretendard/", path.join(NM, "pretendard", "dist", "web", "variable") + path.sep],
   ["/vendor/noto-serif-kr/", path.join(NM, "@fontsource", "noto-serif-kr") + path.sep],
+  ["/vendor/nanum-pen-script/", path.join(NM, "@fontsource", "nanum-pen-script") + path.sep], // 수첩의 손글씨
   // 3D 현장: three.js 본체와 로더 (site.html의 importmap이 가리킨다)
   ["/vendor/three/build/", path.join(NM, "three", "build") + path.sep],
   ["/vendor/three/addons/", path.join(NM, "three", "examples", "jsm") + path.sep],

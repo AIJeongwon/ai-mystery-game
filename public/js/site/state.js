@@ -17,6 +17,11 @@ export function newSiteState(def) {
     holding: null, //  들고 옮기는 것 (사다리)
     npc: {}, //        id → { trust, said: [], turns, log: [] }
     choices: {}, //    갈림 id → 고른 값
+    seenAt: {}, //     조사점 id → 처음 살펴본 시각(분)
+    hints: {}, //      물음 id → 열린 실마리 수
+    // 증거판 (site/reason.js): 카드 자리, 이은 선, 틀린 횟수, 시간 띠, 빈칸 추리
+    board: { pos: { ...(def.start.board || {}) }, links: { ...(def.start.links || {}) }, more: [], wrong: {}, strip: [], ded: {}, seen: [] },
+    book: { seen: {} }, // 수첩에서 이미 읽은 것 (새로 적힌 줄을 가려낸다)
   };
 }
 
@@ -104,6 +109,7 @@ export function apply(st, effect = {}) {
 export function useSpot(st, spot) {
   st.seen[spot.id] = (st.seen[spot.id] || 0) + 1;
   const first = st.seen[spot.id] === 1;
+  if (first) (st.seenAt ||= {})[spot.id] = st.minute;
   // 시간은 처음 살필 때만 든다. 다시 보는 것은 수첩을 넘기는 것과 같다.
   return apply(st, { ...spot.gives, minutes: first ? spot.minutes || 0 : 0 });
 }
@@ -186,7 +192,14 @@ export function loadSite(def) {
     const raw = localStorage.getItem(KEY + def.id);
     if (!raw) return null;
     const st = JSON.parse(raw);
-    return st && st.site === def.id ? { ...newSiteState(def), ...st } : null;
+    if (!st || st.site !== def.id) return null;
+    const base = newSiteState(def), out = { ...base, ...st };
+    // 예전 저장에는 이어받은 카드와 증거판이 없다. 빠진 것만 채운다.
+    for (const [id, at] of Object.entries(base.evidence)) out.evidence[id] ??= at;
+    out.board = { ...base.board, ...(st.board || {}) };
+    out.board.links = { ...base.board.links, ...(st.board?.links || {}) };
+    out.board.pos = { ...base.board.pos, ...(st.board?.pos || {}) };
+    return out;
   } catch {
     return null;
   }
