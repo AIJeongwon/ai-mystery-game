@@ -351,6 +351,11 @@
   background: repeating-linear-gradient(90deg, transparent 0 21px, rgba(180, 60, 40, 0.16) 21px 22px), repeating-linear-gradient(transparent 0 33px, rgba(180, 60, 40, 0.3) 33px 34px) 0 34px, #f3ecdb; }
 .b-sh-head { display: flex; align-items: baseline; gap: 10px; height: 20px; }
 .b-sh-head b { font: 700 14px var(--font-serif); }
+.b-sh-tabs { margin-left: auto; display: flex; gap: 4px; align-self: center; }
+.b-sh-ok + .b-sh-tabs { margin-left: 8px; }
+.b-sh-tabs button { width: 24px; height: 22px; padding: 0; border: 1px solid rgba(92, 84, 72, 0.4); border-radius: 2px; background: transparent; font: 14px/1 var(--font-serif); color: var(--paper-ink-2); }
+.b-sh-tabs button.ok { color: var(--pencil); border-color: rgba(200, 50, 31, 0.5); }
+.b-sh-tabs button.on { background: var(--paper-ink); border-color: var(--paper-ink); color: var(--paper); }
 .b-sh-ok { margin-left: auto; font: 400 24px/1 var(--font-hand); color: var(--pencil); border: 2px solid var(--pencil); border-radius: 50% 44% 52% 47% / 46% 53% 45% 54%; padding: 0 9px 2px; rotate: -5deg; }
 .b-sh-text { margin: 0; flex: 1; font: 400 23px/34px var(--font-hand); color: var(--ink-blue); }
 .b-sh-text.set { font: 700 16.5px/34px var(--font-serif); color: #14110e; letter-spacing: 0.01em; }

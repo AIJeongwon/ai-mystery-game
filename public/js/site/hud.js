@@ -177,7 +177,7 @@ export function makeHud(root) {
     belt.replaceChildren(...[
       ...items.map((it) => el(`div.s-belt-item${active === it.tool ? ".on" : ""}`, it.key ? el("kbd", it.key) : null, it.title)),
       holding ? el("div.s-belt-item.holding", `들고 있다: ${holding}`) : null,
-      el("div.s-belt-item.dim", el("kbd", "I"), "소지품"),
+      marks.bag === false ? null : el("div.s-belt-item.dim", el("kbd", "I"), "소지품"),
       link("book", "Tab", "수첩", marks.book, false),
       link("board", "B", "증거판", marks.board, marks.nudge),
     ].filter(Boolean));

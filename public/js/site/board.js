@@ -449,11 +449,13 @@ export function openBoard({ root, def, st, photos = {}, save = () => {} }) {
   }
 
   // ── 원고지: 빈칸 추리 ──
-  let sheetNotes = [];
+  let sheetNotes = [], sheetPick = null;
+  // 지금 원고지에 올릴 추리: 골라 둔 것, 없으면 아직 맞추지 못한 첫 번째
+  const sheetDed = (open = dedOpen(def, st)) => open.find((d) => d.id === sheetPick) || open.find((d) => !dedState(st, d.id).solved) || open.at(-1) || null;
   function drawSheet(typeset = false) {
     const open = dedOpen(def, st);
     if (!open.length) return void sheetEl.replaceChildren(el("div.b-sh-head", el("em", "원고지")), el("p.b-sh-empty", "아직 문장으로 맞출 만큼 모이지 않았다."));
-    const ded = open[0], me = dedState(st, ded.id), slots = dedSlots(ded, st);
+    const ded = sheetDed(open), me = dedState(st, ded.id), slots = dedSlots(ded, st);
     const text = el(`p.b-sh-text${me.solved ? ".set" : ""}`);
     let n = 0;
     for (const part of dedParts(ded, st)) {
@@ -482,7 +484,8 @@ export function openBoard({ root, def, st, photos = {}, save = () => {} }) {
     }
     const full = slots.every((s) => me.slots[s]);
     put(sheetEl,
-      el("div.b-sh-head", el("em", `추리 ${ded.no}`), el("b", ded.title), me.solved ? el("i.b-sh-ok", "맞았다") : el("span", "빈칸에 카드를 끌어다 끼운다")),
+      el("div.b-sh-head", el("em", `추리 ${ded.no}`), el("b", ded.title), me.solved ? el("i.b-sh-ok", "맞았다") : el("span", "빈칸에 카드를 끌어다 끼운다"),
+        open.length > 1 ? el("span.b-sh-tabs", open.map((d) => el(`button${d === ded ? ".on" : ""}${dedState(st, d.id).solved ? ".ok" : ""}`, { title: d.title, onclick: () => { sheetPick = d.id; sheetNotes = []; sfx.paper(); drawSheet(); } }, d.no))) : null),
       text,
       me.solved ? null : el("div.b-sh-foot",
         el("button.b-sh-check", { disabled: !full || null, onclick: () => check(ded) }, "맞춰 본다"),
@@ -497,6 +500,7 @@ export function openBoard({ root, def, st, photos = {}, save = () => {} }) {
     if (res.ok) {
       sheetNotes = [];
       locked = true;
+      sheetPick = ded.id; // 활자가 되는 동안에는 이 문장을 그대로 둔다
       drawSheet(true);
       drawBar();
       save();
@@ -689,6 +693,6 @@ export function openBoard({ root, def, st, photos = {}, save = () => {} }) {
   sfx.paper();
   return Object.assign(new Promise((r) => (done = r)), {
     // 시험과 개발에서 쓰는 손잡이
-    api: { select: (a, b) => (board.pos[a] && board.pos[b] ? setSel([a, b]) : false), choose, close, check: () => check(dedOpen(def, st)[0]), el: layer },
+    api: { select: (a, b) => (board.pos[a] && board.pos[b] ? setSel([a, b]) : false), choose, close, check: () => check(sheetDed()), sheet: (id) => ((sheetPick = id), (sheetNotes = []), drawSheet()), el: layer },
   });
 }

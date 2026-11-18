@@ -6,7 +6,7 @@ import { questionsPage, factsPage, peoplePage, pullFact, bookKeys, bookSeen, mar
 import { nextDeadline, fmtClock } from "./state.js";
 import { sfx } from "./sfx.js";
 
-const TABS = [
+const ALL_TABS = [
   { id: "q", label: "물음" }, { id: "facts", label: "사실" }, { id: "people", label: "인물" },
   { id: "map", label: "장소" }, { id: "laws", label: "법칙" }, { id: "keys", label: "조작" },
 ];
@@ -42,6 +42,7 @@ function wobblyRect(x, y, w, h, r, amp = 0.9) {
 const MARK = { seen: ["✓", "직접 본 것"], heard: ["❝", "들은 것"], false: ["✕", "거짓으로 드러난 것"], note: ["∴", "판에서 이은 것"] };
 
 export function openNotebook({ root, def, st, tab = null, map = null, photos = {}, save = () => {}, onChange = () => {} }) {
+  const TABS = ALL_TABS.filter((t) => !(def.noMap && t.id === "map")); // 걸어 다니지 않는 곳에는 약도가 없다
   let cur = Math.max(0, TABS.findIndex((t) => t.id === (tab || st.book?.tab || "q")));
   let done = null, flipping = false;
   const fresh = new Set(); // 이번에 처음 보이는 줄
@@ -237,13 +238,13 @@ export function openNotebook({ root, def, st, tab = null, map = null, photos = {
 
   // ── 조작 ──
   function pageKeys() {
-    const rows = [["W A S D", "걷는다 (Shift: 빠르게)"], ["마우스 끌기", "둘러본다"], ["바닥 누르기", "그 자리로 걸어간다"], ["붉은 동그라미 · E", "살펴본다"],
+    const rows = def.keys || [["W A S D", "걷는다 (Shift: 빠르게)"], ["마우스 끌기", "둘러본다"], ["바닥 누르기", "그 자리로 걸어간다"], ["붉은 동그라미 · E", "살펴본다"],
       ["F", "휴대폰 카메라"], ["G", "개조된 펜"], ["I", "가진 물건을 꺼내 본다"], ["Tab", "수첩"], ["B", "증거판"], ["L", "마우스 시점 고정"], ["Esc", "닫는다 · 물러난다"]];
     return [head("조작", "손에 익히는 것"),
       el("ul.n-keys", rows.map(([k, v]) => el("li", el("kbd", k), el("span", v)))),
       el("h4", "증거판에서"),
       el("ul.n-keys", [["카드 끌기", "자리를 옮긴다"], ["두 장 누르기", "잇는다 (연필 손잡이를 끌어도 된다)"], ["1 2 3 4", "맞지 않는다 · 같다 · 앞뒤 · 원문"], ["아래로 끌기", "시간 띠에 꽂거나 원고지의 빈칸에 끼운다"]].map(([k, v]) => el("li", el("kbd", k), el("span", v)))),
-      el("p.n-dim", "살펴보기와 대화에는 게임 속 시간이 든다. 걷는 데는 들지 않는다. 수첩과 증거판을 펼친 동안 시계는 멈춘다.")];
+      el("p.n-dim", def.keysNote || "살펴보기와 대화에는 게임 속 시간이 든다. 걷는 데는 들지 않는다. 수첩과 증거판을 펼친 동안 시계는 멈춘다.")];
   }
 
   const RENDER = { q: pageQuestions, facts: pageFacts, people: pagePeople, map: pageMap, laws: pageLaws, keys: pageKeys };
