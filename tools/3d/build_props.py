@@ -2,6 +2,7 @@
 #   먼저: python tools/3d/make_prop_textures.py   (글자 그림)
 #   Blender에서: exec(open(r"D:\ai-mystery-game\tools\3d\build_props.py", encoding="utf-8").read())
 #   내보내기: export_props()   → public/assets/3d/props/*.glb
+#   build_all() -> build_inspect_props() -> export_props(INSPECT_PROPS): the three prologue inspect props at the end of this file
 # 게임은 glb 안의 이름만 읽는다: detail_* (볼 곳), view_center (눈길의 중심), 재질 이름 *lens_film / *lens (안경알).
 # 좌표: Blender Z가 위. 게임 화면에서 정면은 -Y 쪽에서 본 모습이다 (three.js의 +Z).
 import bpy, bmesh, math, os, io, contextlib, logging
@@ -472,11 +473,11 @@ def build_all():
     build_plenum_empty(info["plenum"]["pipe_r"], [tx, tx + 0.085, tx + 0.2])
     return info
 
-def export_props():
+def export_props(which=None):
     exec(open(os.path.join(HERE, "export_glb.py"), encoding="utf-8").read(), globals())
     os.makedirs(OUT, exist_ok=True)
     out = {}
-    for cname, file, webp in (("prop_pen", "pen.glb", 90), ("prop_glasses", "horn_glasses.glb", 85), ("prop_plenum", "plenum.glb", 85), ("prop_plenum_empty", "plenum_empty.glb", 85)):
+    for cname, file, webp in which or (("prop_pen", "pen.glb", 90), ("prop_glasses", "horn_glasses.glb", 85), ("prop_plenum", "plenum.glb", 85), ("prop_plenum_empty", "plenum_empty.glb", 85)):
         # Blender는 파일 안에서 이름이 겹치지 못한다(view_center.001). 내보내는 컬렉션이 제 이름을 갖도록 돌려 준다.
         for o in bpy.data.collections[cname].objects:
             base = o.name.split(".")[0]
@@ -485,6 +486,12 @@ def export_props():
                 if other:
                     other.name = base + ".swap"
                 o.name = base
+        todo = [bpy.context.view_layer.layer_collection]         # preview()가 꺼 둔 컬렉션은 고를 수 없다: 다시 켠다
+        while todo:
+            l = todo.pop()
+            if l.name == cname:
+                l.exclude = False
+            todo.extend(l.children)
         out[file] = export_collection(cname, os.path.join(OUT, file), draco=True, apply=False, webp=webp)
     return out
 
@@ -572,3 +579,386 @@ def export_char(name):
     out = os.path.join(os.path.dirname(OUT), "chars", name + ".glb")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     return export_collection("char_" + name, out, draco=True, apply=False, webp=85, anim=True)
+
+# ═══════════ 프롤로그의 열람 소품: 택배 상자, 새 필통, 수학 연습지 ═══════════
+#   먼저: python tools/3d/make_prologue_textures.py   (운송장, 쪽지, 수험표, 연습지와 그 광택, 골판지, 천)
+#   build_inspect_props() → export_props(INSPECT_PROPS)
+# 단서가 되는 것(글자, 광택, 왼쪽 알)은 모두 손으로 만든다. 게임이 읽는 이름은 detail_* 과 view_center, 재질 이름 *lens* 뿐이다.
+import json
+from mathutils import noise
+
+def img_mat(name, file, rough=0.8, metal=0.0, rough_file=None, normal_file=None, strength=1.0):
+    """그림을 바탕색으로 쓰는 재질. rough_file은 거칠기 그림(흑백), normal_file은 법선 그림."""
+    m = pbr(name, picture(file) if file else (0.8, 0.8, 0.8), rough, metal)
+    nt = m.node_tree
+    b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    if rough_file:
+        im = picture(rough_file)
+        im.colorspace_settings.name = "Non-Color"
+        t = nt.nodes.new("ShaderNodeTexImage")
+        t.image = im
+        sep = nt.nodes.new("ShaderNodeSeparateColor")           # glTF는 거칠기를 초록 채널에서 읽는다
+        nt.links.new(t.outputs[0], sep.inputs[0])
+        nt.links.new(sep.outputs[1], b.inputs["Roughness"])
+    if normal_file:
+        im = picture(normal_file)
+        im.colorspace_settings.name = "Non-Color"
+        t = nt.nodes.new("ShaderNodeTexImage")
+        t.image = im
+        nm = nt.nodes.new("ShaderNodeNormalMap")
+        nm.inputs[0].default_value = strength
+        nt.links.new(t.outputs[0], nm.inputs[1])
+        nt.links.new(nm.outputs[0], b.inputs["Normal"])
+    return m
+
+def base_color(m, color):
+    b = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+    for l in list(b.inputs["Base Color"].links):
+        m.node_tree.links.remove(l)
+    b.inputs["Base Color"].default_value = (*color, 1.0)
+    return m
+
+def finish_weld(p, name, c, angle=38, M=None):
+    """겹친 점을 붙여 매끈하게 굴리고, 꺾인 모서리만 날카롭게 남긴다."""
+    bmesh.ops.remove_doubles(p.bm, verts=p.bm.verts, dist=1e-6)
+    o = p.finish(name, c)
+    o.data.set_sharp_from_angle(angle=math.radians(angle))
+    if M is not None:
+        o.matrix_world = M
+    return o
+
+def lathe(p, prof, m, seg=32):
+    """(z, r)의 윤곽을 Z축 둘레로 돌린다. UV는 (둘레, 윤곽을 따라간 길이)."""
+    L = [0.0]
+    for (z0, r0), (z1, r1) in zip(prof, prof[1:]):
+        L.append(L[-1] + math.hypot(z1 - z0, r1 - r0))
+    ring = lambda z, r: [Vector((r * math.cos(2 * math.pi * i / seg), r * math.sin(2 * math.pi * i / seg), z)) for i in range(seg + 1)]
+    R = [ring(z, r) for z, r in prof]
+    for k in range(len(prof) - 1):
+        v0, v1 = L[k] / L[-1], L[k + 1] / L[-1]
+        for i in range(seg):
+            u0, u1 = i / seg, (i + 1) / seg
+            if prof[k][1] < 1e-7:
+                p.face([R[k][i], R[k + 1][i], R[k + 1][i + 1]], m, [(u0, v0), (u0, v1), (u1, v1)], smooth=True)
+            elif prof[k + 1][1] < 1e-7:
+                p.face([R[k][i], R[k + 1][i], R[k][i + 1]], m, [(u0, v0), (u0, v1), (u1, v0)], smooth=True)
+            else:
+                p.face([R[k][i], R[k + 1][i], R[k + 1][i + 1], R[k][i + 1]], m, [(u0, v0), (u0, v1), (u1, v1), (u1, v0)], smooth=True)
+
+def disc(p, z, r, m, seg=32):
+    p.face([Vector((r * math.cos(2 * math.pi * i / seg), r * math.sin(2 * math.pi * i / seg), z)) for i in range(seg)], m,
+           [(0.5 + 0.5 * math.cos(2 * math.pi * i / seg), 0.5 + 0.5 * math.sin(2 * math.pi * i / seg)) for i in range(seg)])
+
+def obox(p, M, lo, hi, m):
+    """기울어진 상자: 자리 행렬 M을 거친 상자."""
+    x0, y0, z0 = lo
+    x1, y1, z1 = hi
+    P = [M @ Vector(q) for q in ((x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0), (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1))]
+    for q in ((3, 2, 1, 0), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
+        p.face([P[i] for i in q], m, [(0, 0), (1, 0), (1, 1), (0, 1)])
+
+def rrect(w, d, r, n=6):
+    """모서리가 둥근 네모의 윤곽 (반시계, 오른쪽 가운데에서 시작)."""
+    pts = []
+    for cx, cy, a0 in ((w / 2 - r, d / 2 - r, 0), (-w / 2 + r, d / 2 - r, 90), (-w / 2 + r, -d / 2 + r, 180), (w / 2 - r, -d / 2 + r, 270)):
+        for i in range(n + 1):
+            a = math.radians(a0 + 90 * i / n)
+            pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return pts
+
+def smooth01(a, b, x):
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+
+# ── 택배 상자: 날개를 젖힌 골판지 상자(30 x 22 x 11cm). 구겨 넣은 종이 위에 도장, 인주통, 쪽지. 운송장은 앞면에 ──
+def build_parcel():
+    c = coll("prop_parcel")
+    W, D, H, T, F = 0.30, 0.22, 0.11, 0.004, 0.106
+    Z0 = 0.072                                                   # 물건이 놓인 종이의 높이
+    card = img_mat("prop_cardboard", "pl_cardboard.png", 0.9)
+    edge = img_mat("prop_cardboard_edge", "pl_cardboard_edge.png", 0.95)
+    tape = pbr("prop_tape", (0.46, 0.33, 0.17), 0.2)
+    p = Part()
+    def panel(o, u, v, t=T):
+        """골판지 한 장. o에서 u, v로 펼친 면이 겉이고, 두께는 그 뒤로 간다. 잘린 단면에는 골이 보인다."""
+        o, u, v = Vector(o), Vector(u), Vector(v)
+        n = u.cross(v).normalized()
+        A = [o, o + u, o + u + v, o + v]
+        B = [q - n * t for q in A]
+        lu, lv = u.length / 0.25, v.length / 0.25
+        p.face(A, card, [(0, 0), (lu, 0), (lu, lv), (0, lv)])
+        p.face(B, card, [(0.31, 0.17), (0.31 + lu, 0.17), (0.31 + lu, 0.17 + lv), (0.31, 0.17 + lv)])
+        for i in range(4):
+            j = (i + 1) % 4
+            L = (A[j] - A[i]).length / 0.032
+            p.face([A[i], A[j], B[j], B[i]], edge, [(0, 1), (L, 1), (L, 0), (0, 0)])
+        return n
+    panel((-W / 2 + T, D / 2 - T, 0), (W - 2 * T, 0, 0), (0, -(D - 2 * T), 0))            # 바닥
+    panel((-W / 2, -D / 2, 0), (W, 0, 0), (0, 0, H))                                       # 앞
+    panel((W / 2, D / 2, 0), (-W, 0, 0), (0, 0, H))                                        # 뒤
+    panel((-W / 2, D / 2 - T, 0), (0, -(D - 2 * T), 0), (0, 0, H))                         # 왼쪽
+    panel((W / 2, -D / 2 + T, 0), (0, D - 2 * T, 0), (0, 0, H))                            # 오른쪽
+    # 날개: 뒤는 세워 젖히고, 양옆은 비스듬히 벌어지고, 앞은 안으로 접어 넣었다(그래서 앞면의 운송장이 가려지지 않는다)
+    rad = math.radians
+    tb = rad(112)
+    vb = Vector((0, -math.cos(tb), math.sin(tb)))
+    nb = panel((W / 2, D / 2, H), (-W, 0, 0), vb * F)
+    tr = rad(127)
+    panel((W / 2, -D / 2 + 0.003, H), (0, D - 0.006, 0), Vector((-math.cos(tr), 0, math.sin(tr))) * F)
+    tl = rad(142)
+    panel((-W / 2, D / 2 - 0.003, H), (0, -(D - 0.006), 0), Vector((math.cos(tl), 0, math.sin(tl))) * F)
+    tf = rad(-83)
+    panel((-W / 2 + T + 0.003, -D / 2 + 2 * T + 0.0015, H - 0.001), (W - 2 * T - 0.006, 0, 0), Vector((0, math.cos(tf), math.sin(tf))) * F)
+    # 테이프: 가운데 이음매를 따라 붙였던 것이 양옆 벽으로 내려와 있고, 칼로 가른 반쪽이 뒷날개 끝에 남았다
+    for s in (1, -1):
+        p.quad((s * (W / 2 + 0.0004), 0, H - 0.029), (0, 0.024, 0), (0, 0, 0.029), tape)
+        p.quad((s * (W / 2 + 0.0004), 0, 0.021), (0, 0.024, 0), (0, 0, 0.021), tape)
+    p.quad(Vector((0, D / 2, H)) + vb * (F - 0.0122) + nb * 0.0004, (W / 2 - 0.0005, 0, 0), vb * 0.012, tape)
+    # 운송장: 손으로 붙여 조금 기울었다
+    a = rad(2.2)
+    p.quad((-0.048, -D / 2 - 0.0005, 0.057), Vector((math.cos(a), 0, math.sin(a))) * 0.055, Vector((-math.sin(a), 0, math.cos(a))) * 0.031, img_mat("prop_waybill", "pl_waybill.png", 0.5))
+    p.finish("parcel_box", c)
+
+    # 물건의 자리
+    axis = Vector((0.55, 0.80, -0.16)).normalized()             # 도장: 새긴 면에서 손잡이 쪽으로
+    PF = Vector((-0.106, -0.046, Z0 + 0.0215))                   # 새긴 면의 한가운데
+    TIN = Vector((0.070, 0.040, Z0 - 0.002))
+    MEMO = Vector((0.014, -0.030, Z0 + 0.0065))
+    psi, phi = rad(18), rad(57)                                 # 뚜껑이 기댄 방향과 기울기
+    d = Vector((math.cos(psi), math.sin(psi), 0))
+    LIDZ = Z0 - 0.0015
+    LIDB = TIN + d * (0.0270 + (TIN.z + 0.0140 - LIDZ) / math.tan(phi) + 0.0008)
+    LIDB.z = LIDZ
+    rest = [((PF + axis * 0.010).xy, 0.022, Z0 + 0.005), ((PF + axis * 0.056).xy, 0.026, Z0 - 0.007), (TIN.xy, 0.036, Z0 - 0.002), (LIDB.xy, 0.022, Z0 - 0.004), (MEMO.xy, 0.052, Z0)]
+
+    # 구겨 넣은 누런 종이
+    kraft = pbr("prop_kraft", noise_image("prop_kraft", (0.62, 0.50, 0.35), 0.03, 256, 3), 0.96)
+    NX, NY = 46, 34
+    x0, x1, y0, y1 = -W / 2 + T + 0.001, W / 2 - T - 0.001, -D / 2 + 0.022, D / 2 - T - 0.001
+    rng = np.random.default_rng(12)
+    G = []
+    for j in range(NY + 1):
+        row = []
+        for i in range(NX + 1):
+            x, y = x0 + (x1 - x0) * i / NX, y0 + (y1 - y0) * j / NY
+            if 0 < i < NX:
+                x += rng.uniform(-0.0018, 0.0018)
+            if 0 < j < NY:
+                y += rng.uniform(-0.0018, 0.0018)
+            q = Vector((x * 21, y * 21, 1.7))
+            cr = (1 - abs(noise.noise(q))) * 0.020 + (1 - abs(noise.noise(q * 2.9 + Vector((5, 3, 0))))) * 0.008 + rng.uniform(-0.001, 0.001)
+            z = Z0 - 0.022 + cr
+            for cen, r, zi in rest:
+                w = 1 - smooth01(r * 0.75, r + 0.018, (Vector((x, y)) - cen).length)
+                z = z * (1 - w) + (zi - 0.0006 + cr * 0.06) * w
+            row.append(Vector((x, y, z)))
+        G.append(row)
+    pp = Part()
+    uvk = lambda q: (q.x / 0.12, q.y / 0.12)
+    for j in range(NY):
+        for i in range(NX):
+            a_, b_, c_, d_ = G[j][i], G[j][i + 1], G[j + 1][i + 1], G[j + 1][i]
+            tris = ((a_, b_, c_), (a_, c_, d_)) if abs(a_.z - c_.z) < abs(b_.z - d_.z) else ((a_, b_, d_), (b_, c_, d_))
+            for t in tris:
+                pp.face(list(t), kraft, [uvk(q) for q in t])
+    pp.finish("parcel_paper", c)
+
+    # 도장: 닳은 나무 손잡이. 새긴 면에는 인주가 말라붙어 있다
+    wood = img_mat("prop_stamp_wood", "pl_stamp_wood.png", 0.46)
+    sp = Part()
+    lathe(sp, [(0.0, 0.0150), (0.0006, 0.0153), (0.0150, 0.0153), (0.0166, 0.0146), (0.0182, 0.0128), (0.0215, 0.0102), (0.0280, 0.0088), (0.0340, 0.0084),
+               (0.0400, 0.0093), (0.0455, 0.0118), (0.0510, 0.0150), (0.0570, 0.0167), (0.0625, 0.0163), (0.0675, 0.0140), (0.0708, 0.0100), (0.0724, 0.0055), (0.0730, 0.0)], wood)
+    disc(sp, 0.0, 0.0150, img_mat("prop_stamp_face", "pl_stamp_face.png", 0.62))
+    finish_weld(sp, "parcel_stamp", c, 50, Matrix.Translation(PF) @ axis.to_track_quat("Z", "Y").to_matrix().to_4x4() @ Matrix.Rotation(rad(40), 4, "Z"))
+
+    # 인주통: 놋쇠. 뚜껑은 옆에 기대어 있다
+    brass = pbr("prop_brass", noise_image("prop_brass", (0.78, 0.58, 0.24), 0.035, 256, 5), 0.3, 1.0)
+    brass_in = pbr("prop_brass_in", (0.42, 0.22, 0.12), 0.5, 0.7)
+    tp = Part()
+    lathe(tp, [(0.0, 0.0), (0.0, 0.0258), (0.0012, 0.0270), (0.0128, 0.0270), (0.0138, 0.0266), (0.0140, 0.0260), (0.0138, 0.0254), (0.0128, 0.0250), (0.0104, 0.0250)], brass, 40)
+    disc(tp, 0.0104, 0.0250, img_mat("prop_ink_pad", "pl_ink_pad.png", 0.8, rough_file="pl_ink_pad_rough.png"), 40)
+    finish_weld(tp, "parcel_ink", c, 50, Matrix.Translation(TIN))
+    lp = Part()
+    lathe(lp, [(0.0, 0.0277), (0.0, 0.0287), (0.0060, 0.0287), (0.0070, 0.0280), (0.0074, 0.0268), (0.0075, 0.0215), (0.0070, 0.0208), (0.0070, 0.0196), (0.0075, 0.0189), (0.0077, 0.0)], brass, 40)
+    lathe(lp, [(0.0, 0.0277), (0.0064, 0.0277), (0.0066, 0.0)], brass_in, 40)
+    s_up = -d * math.cos(phi) + Vector((0, 0, math.sin(phi)))    # 뚜껑이 기대어 올라가는 방향
+    n_top = d * math.sin(phi) + Vector((0, 0, math.cos(phi)))    # 뚜껑의 윗면이 보는 방향
+    t_h = Vector((0, 0, 1)).cross(d)
+    R3 = Matrix((t_h, n_top.cross(t_h), n_top)).transposed()
+    finish_weld(lp, "parcel_ink_lid", c, 50, Matrix.Translation(LIDB + s_up * 0.0287) @ R3.to_4x4())
+
+    # 쪽지: 한 번 접었던 종이
+    mp = Part()
+    note = img_mat("prop_memo", "pl_memo.png", 0.86)
+    hw, hh = 0.046, 0.023
+    mp.face([(-hw, -hh, 0.0008), (0, -hh, 0.0044), (0, hh, 0.0050), (-hw, hh, 0.0016)], note, [(0, 0), (0.5, 0), (0.5, 1), (0, 1)])
+    mp.face([(0, -hh, 0.0044), (hw, -hh, 0.0012), (hw, hh, 0.0026), (0, hh, 0.0050)], note, [(0.5, 0), (1, 0), (1, 1), (0.5, 1)])
+    mo = mp.finish("parcel_memo", c)
+    mo.matrix_world = Matrix.Translation(MEMO) @ Matrix.Rotation(rad(7), 4, "Z") @ Matrix.Rotation(rad(13), 4, "X")
+
+    empty("detail_stamp", PF + axis * 0.034 + Vector((0, 0, 0.019)), c)
+    empty("detail_ink", TIN + Vector((0, 0, 0.018)), c)
+    empty("detail_memo", MEMO + Vector((0, 0, 0.008)), c)
+    empty("view_center", (0, 0, 0.07), c)
+    return c
+
+# ── 새 필통: 지퍼를 끝까지 열어 펼친 천 필통. 뚜껑의 주머니에 수험표, 몸통에 다리를 접은 뿔테 안경과 사인펜 ──
+def folded_glasses():
+    """안경의 다리를 접은 메시. 다리를 앞테 바로 뒤에서 잘라 내어 안쪽으로 돌린다."""
+    src = next(o for o in bpy.data.collections["prop_glasses"].objects if o.type == "MESH").data
+    me = src.copy()
+    me.name = "prop_case_glasses"
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    CUT = -0.052
+    bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], plane_co=(0, CUT, 0), plane_no=(0, 1, 0), clear_inner=False, clear_outer=False)
+    on = lambda v: abs(v.co.y - CUT) < 1e-5 and abs(v.co.x) > 0.058
+    bmesh.ops.split_edges(bm, edges=[e for e in bm.edges if on(e.verts[0]) and on(e.verts[1])])
+    bm.faces.ensure_lookup_table()
+    temple = {v for f in bm.faces if f.calc_center_median().y > CUT and abs(f.calc_center_median().x) > 0.04 for v in f.verts}
+    side = {s: [v for v in temple if v.co.x * s > 0] for s in (-1, 1)}
+    bmesh.ops.holes_fill(bm, edges=[e for e in bm.edges if e.is_boundary and on(e.verts[0]) and on(e.verts[1])], sides=0)
+    for s, deg, back in ((-1, 83, 0.0010), (1, 77, 0.0040)):    # 오른쪽 다리를 먼저 접고, 왼쪽 다리가 그 위에 얹힌다
+        vs = side[s]
+        bmesh.ops.rotate(bm, cent=(s * 0.0685, CUT, 0), matrix=Matrix.Rotation(math.radians(s * deg), 3, "Z"), verts=vs)
+        bmesh.ops.translate(bm, vec=(0, back, 0), verts=vs)
+    bm.normal_update()
+    bm.to_mesh(me)
+    bm.free()
+    return me, len(temple)
+
+def build_pencilcase():
+    c = coll("prop_pencilcase")
+    W, D, Hh, R, T, FL, S = 0.225, 0.100, 0.020, 0.018, 0.0035, 0.003, 0.02
+    rad = math.radians
+    cloth = img_mat("prop_case_cloth", "pl_fabric.png", 0.93, normal_file="pl_fabric_n.png", strength=0.9)
+    lining = base_color(img_mat("prop_case_lining", None, 0.82, normal_file="pl_fabric_n.png", strength=0.35), (0.115, 0.135, 0.185))
+    pocket = base_color(img_mat("prop_case_pocket", None, 0.8, normal_file="pl_fabric_n.png", strength=0.35), (0.085, 0.100, 0.145))
+    ztape = pbr("prop_case_ztape", (0.030, 0.040, 0.070), 0.88)
+    metal = pbr("prop_case_zip", (0.34, 0.35, 0.37), 0.42, 1.0)
+    MB = Matrix.Translation((0, -0.006 - D / 2, 0))                                           # 몸통
+    ML = Matrix.Translation((0, 0.006, 0)) @ Matrix.Rotation(rad(9), 4, "X") @ Matrix.Translation((0, D / 2, 0))   # 뚜껑: 끝이 조금 들려 있다
+    p = Part()
+    out, inn, bot, mid = rrect(W, D, R), rrect(W - 2 * T, D - 2 * T, R - T), rrect(W - 0.007, D - 0.007, R - 0.0035), rrect(W - T, D - T, R - T / 2, 10)
+    n = len(out)
+    per = [0.0]
+    for k in range(n):
+        per.append(per[-1] + (Vector(out[(k + 1) % n]) - Vector(out[k])).length)
+    def tray(M, hinge):
+        P = lambda q, z: M @ Vector((q[0], q[1], z))
+        p.face([P(q, 0) for q in reversed(bot)], cloth, [(q[0] / S, q[1] / S) for q in reversed(bot)])
+        for k in range(n):
+            a, b = k, (k + 1) % n
+            u0, u1 = per[k] / S, per[k + 1] / S
+            p.face([P(bot[a], 0), P(bot[b], 0), P(out[b], 0.0035), P(out[a], 0.0035)], cloth, [(u0, 0), (u1, 0), (u1, 0.2), (u0, 0.2)], smooth=True)
+            p.face([P(out[a], 0.0035), P(out[b], 0.0035), P(out[b], Hh), P(out[a], Hh)], cloth, [(u0, 0.2), (u1, 0.2), (u1, Hh / S + 0.03), (u0, Hh / S + 0.03)], smooth=True)
+            p.face([P(out[a], Hh), P(out[b], Hh), P(inn[b], Hh), P(inn[a], Hh)], ztape)
+            p.face([P(inn[a], Hh), P(inn[b], Hh), P(inn[b], FL), P(inn[a], FL)], lining, [(u0 * 1.6, 1.6), (u1 * 1.6, 1.6), (u1 * 1.6, 0), (u0 * 1.6, 0)], smooth=True)
+        p.face([P(q, FL) for q in inn], lining, [(q[0] / S * 1.6, q[1] / S * 1.6) for q in inn])
+        # 지퍼 이: 경첩 쪽을 뺀 세 변을 따라
+        m2 = [Vector(q) for q in mid]
+        acc, k, step = 0.0, 0, 0.0026
+        for k in range(len(m2)):
+            a, b = m2[k], m2[(k + 1) % len(m2)]
+            L = (b - a).length
+            t = (b - a).normalized() if L > 1e-9 else Vector((1, 0))
+            while acc < L:
+                q = a + t * acc
+                if q.y * hinge < D / 2 - R - 0.002:
+                    Mt = M @ Matrix.Translation((q.x, q.y, Hh)) @ Matrix.Rotation(math.atan2(t.y, t.x), 4, "Z")
+                    obox(p, Mt, (-0.0008, -0.0016, -0.0002), (0.0008, 0.0016, 0.0012), metal)
+                acc += step
+            acc -= L
+    tray(MB, 1)
+    tray(ML, -1)
+    # 등(경첩): 두 반쪽을 잇는 천
+    p.box((-W / 2 + R, -0.0085, 0.0003), (W / 2 - R, 0.0085, 0.0034), cloth)
+    # 지퍼 손잡이: 몸통의 오른쪽 끝에 멈춰 있다
+    MS = MB @ Matrix.Translation((W / 2 - T / 2, D / 2 - R - 0.004, Hh))
+    obox(p, MS, (-0.0030, -0.0042, -0.0004), (0.0030, 0.0042, 0.0034), metal)
+    obox(p, MS @ Matrix.Translation((0.0026, 0, 0.0028)) @ Matrix.Rotation(rad(62), 4, "Y"), (0.0, -0.0026, -0.0005), (0.0170, 0.0026, 0.0005), metal)
+    # 뚜껑 안쪽의 주머니: 수험표의 아래쪽이 여기에 꽂혀 있다
+    YC = -0.012
+    PL = lambda x, y, z: ML @ Vector((x, y, z))
+    xi = W / 2 - T
+    pts = [(-xi, YC)] + [q for q in inn if q[1] < YC - 1e-6] + [(xi, YC)]
+    p.face([PL(q[0], q[1], FL + 0.0017) for q in pts], pocket, [(q[0] / S * 1.6, q[1] / S * 1.6) for q in pts])
+    p.face([PL(-xi, YC - 0.0045, FL + 0.0020), PL(xi, YC - 0.0045, FL + 0.0020), PL(xi, YC, FL + 0.0020), PL(-xi, YC, FL + 0.0020)], cloth, [(0, 0), (2 * xi / S, 0), (2 * xi / S, 0.22), (0, 0.22)])
+    # 가격표를 뗀 자국: 몸통의 앞면에, 끈끈이가 번들거리고 종이 부스러기가 남았다
+    residue = pbr("prop_tag_residue", (0.07, 0.095, 0.155), 0.36)
+    scrap = pbr("prop_tag_scrap", (0.86, 0.85, 0.80), 0.8)
+    yf = -D / 2 - 0.0004
+    PB = lambda x, z, dy=0.0: MB @ Vector((x, yf - dy, z))
+    p.face([PB(0.058 + q[0], 0.0118 + q[1]) for q in rrect(0.027, 0.0115, 0.0018, 3)], residue)
+    for sx, sz, w, h, a in ((0.048, 0.0150, 0.0050, 0.0018, 0.2), (0.066, 0.0092, 0.0064, 0.0014, -0.15), (0.0585, 0.0125, 0.0030, 0.0012, 0.5), (0.0695, 0.0155, 0.0022, 0.0016, -0.4)):
+        ca, sa = math.cos(a), math.sin(a)
+        p.face([PB(sx + qx * ca - qz * sa, sz + qx * sa + qz * ca, 0.0002) for qx, qz in ((-w / 2, -h / 2), (w / 2, -h * 0.3), (w * 0.4, h / 2), (-w * 0.45, h * 0.4))], scrap)
+    finish_weld(p, "case", c, 40)
+
+    # 수험표
+    tk = Part()
+    tk.quad((0, 0, 0), (0.062, 0, 0), (0, 0.035, 0), img_mat("prop_ticket", "pl_ticket.png", 0.78))
+    to = tk.finish("case_ticket", c)
+    TK = ML @ Matrix.Translation((-0.030, 0.0075, FL + 0.0011)) @ Matrix.Rotation(rad(2.5), 4, "Z") @ Matrix.Rotation(rad(1.3), 4, "X")
+    to.matrix_world = TK
+    # 뿔테 안경: 알이 위를 보게 누워 있다. 착용자 기준 왼쪽 알(무지갯빛)이 +X
+    gme, ntemple = folded_glasses()
+    co = coords(gme)
+    go = bpy.data.objects.new("case_glasses", gme)
+    c.objects.link(go)
+    GL = MB @ Matrix.Translation((0.031, 0.013, FL + 0.0006)) @ Matrix.Rotation(rad(-3.5), 4, "Z") @ Matrix.Translation((0, -(co[:, 2].min() + co[:, 2].max()) / 2, co[:, 1].max())) @ Matrix.Rotation(rad(-90), 4, "X")
+    go.matrix_world = GL
+    # 사인펜: 라벨의 검은 네모가 위를 보게 돌려 놓았다
+    pme = next(o for o in bpy.data.collections["prop_pen"].objects if o.type == "MESH").data
+    po = bpy.data.objects.new("case_pen", pme)
+    c.objects.link(po)
+    PN = MB @ Matrix.Translation((-0.020, -0.0365, FL + 0.0066)) @ Matrix.Rotation(rad(1.5), 4, "Z") @ Matrix.Rotation(rad(-58), 4, "X")
+    po.matrix_world = PN
+    empty("detail_ticket", ML @ Vector((-0.030, 0.020, FL + 0.007)), c)
+    empty("detail_glasses", GL @ Vector((0, float(co[:, 1].min()) - 0.004, float(co[:, 2].min() + co[:, 2].max()) / 2)), c)
+    empty("detail_pen", PN @ Vector((-0.064, 0, 0.008)), c)
+    empty("view_center", (0, 0.004, 0.014), c)
+    return c, {"temple_verts": ntemple, "glasses_y": [float(co[:, 1].min()), float(co[:, 1].max())]}
+
+# ── 수학 연습지: 책상 위의 A4 한 장. 문제의 줄마다 눌린 광택이 거칠기 그림에만 남아 있다 ──
+def build_practice():
+    c = coll("prop_practice")
+    with open(os.path.join(TEX, "pl_practice.json"), encoding="utf-8") as fp:
+        meta = json.load(fp)
+    PW, PH = 0.210, 0.297
+    paper = img_mat("prop_practice_paper", "pl_practice.png", 0.95, rough_file="pl_practice_rough.png")
+    blank = pbr("prop_practice_blank", (0.86, 0.85, 0.80), 0.95)
+    desk = pbr("prop_practice_desk", noise_image("prop_practice_desk", (0.30, 0.23, 0.16), 0.018, 256, 9), 0.5)
+    dp = Part()
+    dp.box((-0.31, -0.23, -0.02), (0.31, 0.23, 0.0), desk)
+    # 아래에 깔린 다른 종이 한 장 (뒷면)
+    M2 = Matrix.Translation((0.021, -0.013, 0.0003)) @ Matrix.Rotation(math.radians(-6.5), 4, "Z")
+    dp.face([M2 @ Vector(q) for q in ((-PW / 2, -PH / 2, 0), (PW / 2, -PH / 2, 0), (PW / 2, PH / 2, 0), (-PW / 2, PH / 2, 0))], blank)
+    dp.finish("practice_desk", c)
+    # 연습지: 오른쪽 위 귀퉁이가 조금 들렸다
+    def lift(u, v):
+        return 0.0008 + 0.0030 * smooth01(0.62, 1.0, u) * smooth01(0.60, 1.0, v) + 0.0009 * smooth01(0.7, 1.0, 1 - u) * smooth01(0.75, 1.0, 1 - v) + 0.00035 * (1 + math.sin(u * 4.1 + v * 2.3))
+    sp = Part()
+    NX, NY = 14, 20
+    P = lambda i, j: Vector(((i / NX - 0.5) * PW, (j / NY - 0.5) * PH, lift(i / NX, j / NY)))
+    for j in range(NY):
+        for i in range(NX):
+            sp.face([P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1)], paper, [(i / NX, j / NY), ((i + 1) / NX, j / NY), ((i + 1) / NX, (j + 1) / NY), (i / NX, (j + 1) / NY)], smooth=True)
+    so = finish_weld(sp, "practice_sheet", c, 60)
+    if so.data.polygons[0].normal.z < 0:
+        so.data.flip_normals()
+    IW, IH = meta["size"]
+    at = lambda px, py, z=0.004: ((px / IW - 0.5) * PW, (0.5 - py / IH) * PH, z)
+    empty("detail_gloss", at(*meta["gloss"]), c)
+    empty("detail_margin", at(*meta["margin"]), c)
+    empty("view_center", (0, 0, 0), c)
+    return c
+
+INSPECT_PROPS = (("prop_parcel", "parcel.glb", 88), ("prop_pencilcase", "pencilcase.glb", 88), ("prop_practice", "practice.glb", 90))
+
+def build_inspect_props():
+    """build_all() 다음에 부른다 (필통이 사인펜과 안경의 메시를 빌려 쓴다)."""
+    build_parcel()
+    _, info = build_pencilcase()
+    build_practice()
+    return info

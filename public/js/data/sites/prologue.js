@@ -203,7 +203,7 @@ const SITES = [
 // ── 열람 ──
 const INSPECTS = {
   parcel: {
-    title: "택배 상자", build: "parcel", view: { yaw: 0.4, pitch: 0.5 },
+    title: "택배 상자", model: "/assets/3d/props/parcel.glb", build: "parcel", view: { yaw: 0.35, pitch: 0.8 },
     intro: ["열흘 전에 온 택배 상자. 보낸 사람 칸은 비어 있다."],
     details: [
       { id: "stamp", node: "detail_stamp", label: "도장", text: ["나무 손잡이가 닳은 도장. 새긴 면에는 인주가 말라붙어 있다.", "아직 한 번도 찍지 않았다."] },
@@ -212,7 +212,7 @@ const INSPECTS = {
     ],
   },
   pencilcase: {
-    title: "새 필통", build: "pencilcase", view: { yaw: 0.2, pitch: 0.75 },
+    title: "새 필통", model: "/assets/3d/props/pencilcase.glb", build: "pencilcase", view: { yaw: 0.15, pitch: 0.95 },
     intro: ["지퍼 달린 천 필통. 가격표를 뗀 자국이 그대로다.", "안에 든 것은 셋."],
     details: [
       { id: "ticket", node: "detail_ticket", label: "수험표", text: ["수험표. 한도현. 시험장 목원고, 12시험실 24번.", "주인이 누구인지는 이것으로 안다."], gives: { flags: ["know_seat"] } },
@@ -221,7 +221,7 @@ const INSPECTS = {
     ],
   },
   practice: {
-    title: "수학 연습지", build: "practice", dark: true, flashlight: true, view: { yaw: 0, pitch: 0.95, radius: 0.34, torch: 9 },
+    title: "수학 연습지", model: "/assets/3d/props/practice.glb", build: "practice", dark: true, flashlight: true, view: { yaw: 0, pitch: 1.05, radius: 0.36, near: 0.8, torch: 9, torchAt: [0.2, 1.4, 0.9] },
     intro: ["도현의 자리에 남은 수학 연습지. 스탠드를 끄고 휴대폰 불빛을 비스듬히 비춘다."],
     details: [
       { id: "margin", node: "detail_margin", label: "여백", text: ["킬러 문항 다섯 개. 여백에 풀이가 한 줄도 없다.", "답만 적혀 있다. 전부 맞았다."] },
