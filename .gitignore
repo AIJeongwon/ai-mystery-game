@@ -8,12 +8,10 @@ node_modules/
 *.log
 server/usage.json
 
-# 저장소에 올리지 않는 큰 파일: 가공 전 원본 이미지, 터널 실행 파일
+# 저장소에 올리지 않는 큰 파일: 가공 전 원본(이미지, 3D 원본 glb와 .blend), 터널 실행 파일
+# 게임이 읽는 3D 에셋(public/assets/3d/)은 Git LFS 없이 일반 파일로 올린다
 tools/_raw/
 tools/bin/
-
-# 3D 에셋은 당분간 각자 로컬에 둔다 (블록아웃·사실화 glb, 소품, 인물)
-public/assets/3d/
 
 # 운영체제가 만드는 파일
 .DS_Store
