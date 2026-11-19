@@ -153,7 +153,10 @@ export function openTravel({ root, def, st }) {
   const sheet = el("div.tv-sheet",
     el("div.tv-head", el("h2", "어디로 가나"), el("span.tv-clock", fmtClock(st.minute))),
     art,
-    el("div.tv-foot", info, el("button.tv-stay", { type: "button", onclick: () => close(null) }, here ? `${here.name}에 남는다` : "닫는다", el("kbd", "Esc"))),
+    el("div.tv-foot", info,
+      // 본 게임의 지도로 나간다 (세계지도 → 국가 지도 → 사건 → 현장의 거꾸로). 현장의 진행은 저장돼 있다.
+      el("a.tv-out", { href: "/?resume", title: "취재를 잠시 멈추고 세계지도로 나간다. 지금까지 한 것은 저장돼 있다." }, "세계지도로 나간다"),
+      el("button.tv-stay", { type: "button", onclick: () => close(null) }, here ? `${here.name}에 남는다` : "닫는다", el("kbd", "Esc"))),
   );
   const layer = el("div.tv-layer", { role: "dialog", "aria-label": "약도" }, sheet);
 

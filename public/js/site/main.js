@@ -9,8 +9,13 @@ import { loadPhotos, savePhotos } from "./photos.js";
 
 const q = new URLSearchParams(location.search);
 const kase = CASES[q.get("case")];
-if (kase && q.has("fresh")) clearSite(kase.def);
-const def = (kase ? SITES[(!q.has("fresh") && loadSaved(kase.def.save)?.at) || kase.first] : SITES[q.get("site")]) || SITES.mokwon_room12;
+const fresh = q.has("fresh");
+if (kase && fresh) {
+  clearSite(kase.def);
+  q.delete("fresh"); // 새로 고침했을 때 또 지우지 않게 주소에서 떼어 둔다
+  history.replaceState(null, "", `${location.pathname}?${q}`);
+}
+const def = (kase ? SITES[(!fresh && loadSaved(kase.def.save)?.at) || kase.first] : SITES[q.get("site")]) || SITES.mokwon_room12;
 // 앞 사건에서 넘어왔다: 카드와 판과 수첩을 얹어 저장해 두면, 현장은 저장을 읽듯이 연다
 if (q.has("carry") && def.kind !== "desk") {
   const from = loadSaved(q.get("carry"));
@@ -28,8 +33,8 @@ document.title = `${def.title} — 기정사실`;
 checkHealth(); // AI 연기를 쓸 수 있는지. 못 쓰면 규칙 모드로 간다.
 try {
   // 책상은 3D를 쓰지 않는다. 쓰는 쪽만 내려받는다.
-  if (def.kind === "desk") window.__site = await (await import("./desk.js")).createDesk(root, def, { fresh: q.has("fresh") });
-  else window.__site = await (await import("./engine.js")).createSite(root, def, { stats: q.has("stats"), blockout: q.has("blockout"), fresh: q.has("fresh") });
+  if (def.kind === "desk") window.__site = await (await import("./desk.js")).createDesk(root, def, { fresh });
+  else window.__site = await (await import("./engine.js")).createSite(root, def, { stats: q.has("stats"), blockout: q.has("blockout"), fresh });
   loading?.remove();
 } catch (e) {
   console.error(e);

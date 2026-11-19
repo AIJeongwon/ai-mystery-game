@@ -1,5 +1,5 @@
 // 타이틀 화면 · 새 게임 · 도움말
-import { hasSave, peekSave, loadGame, newGame, importSave, deleteSave } from "../core/store.js";
+import { hasSave, peekSave, loadGame, newGame, importSave, deleteSave, FIELD_CHAPTERS } from "../core/store.js";
 import { fmtDate } from "../core/util.js";
 import { h, $, mount, icon, modal, sealSvg, toast, confirmDialog } from "./dom.js";
 import { TIERS } from "../data/progress.js";
@@ -53,7 +53,7 @@ export function showTitle(startFn) {
       h("div.title-hanja", "記 定 事 實"),
       h("p.title-tag", "쓰는 대로, 세상은 그렇게 안다."),
       h("div.title-menu",
-        save ? h("button.btn.primary.title-btn", { onclick: () => cont() }, icon("play", 16), "이어하기", h("span.sub", `${save.outlet} · ${fmtDate(save.min, { short: true })} · ${TIERS[save.tier - 1].name}`)) : null,
+        save ? h("button.btn.primary.title-btn", { onclick: () => cont() }, icon("play", 16), "이어하기", h("span.sub", FIELD_CHAPTERS.has(save.ch) ? `${save.outlet} · 현장 취재 중` : `${save.outlet} · ${fmtDate(save.min, { short: true })} · ${TIERS[save.tier - 1].name}`)) : null,
         h("button.btn.title-btn", { class: save ? "" : "primary", onclick: () => openNewGame(Boolean(save)) }, icon("pen", 16), "새로 시작"),
         h("button.btn.ghost.title-btn", { onclick: () => loadFile() }, icon("doc", 16), "세이브 파일 불러오기"),
         h("button.btn.ghost.title-btn", { onclick: () => openHelp() }, icon("info", 16), "도움말")),
@@ -94,7 +94,7 @@ function openNewGame(hasOld) {
     body: h("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } },
       h("div.field", h("label", "당신의 이름"), name),
       h("div.field", h("label", "당신이 세운 매체의 이름"), outlet),
-      h("label.row", { style: { fontSize: "13px", color: "var(--text-2)", cursor: "pointer" } }, skip, "프롤로그 건너뛰기 (이미 해 본 경우)"),
+      h("label.row", { title: "세계 시뮬레이션과 옛 제1장으로 시작한다. 프롤로그 「시험 전」은 열리지 않는다.", style: { fontSize: "13px", color: "var(--text-2)", cursor: "pointer" } }, skip, "사건 없이 매체 경영부터 시작한다 (예전 방식)"),
       hasOld ? h("div.red", { style: { fontSize: "12.5px" } }, "새로 시작하면 기존 저장이 덮어씌워진다.") : null),
     buttons: [
       { label: "취소", ghost: true },
@@ -118,7 +118,14 @@ export function openHelp() {
   modal({
     title: "도움말", eyebrow: "기정사실(記定事實)", cls: "wide", holdClock: Boolean($("#screen-title").classList.contains("hidden")),
     body: h("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } },
-      sec("기자의 하루", [
+      sec("사건 취재", [
+        "새로 시작하면 세계지도가 열린다. 사건이 들어온 나라에는 붉은 표가 떠 있다.",
+        "나라를 누르면 그 나라의 지도(시·도 단위)가 펴진다. 세계지도에서는 조사나 인터뷰를 하지 않는다.",
+        "사건 핀을 누르면 개요가 보인다. 개요에는 누구나 아는 것만 적혀 있다.",
+        "'현장으로 간다'를 누르면 현장으로 옮겨 간다. 걸어 다니며 살펴보고, 사람과 이야기하고, 단서를 이어 추리한다.",
+        "현장의 진행은 따로 저장된다. 타이틀에서 '이어하기'를 누르면 하던 사건의 개요가 다시 열린다.",
+      ]),
+      sec("기자의 하루 (매체 경영으로 시작했을 때)", [
         "세계지도 위에 사건이 떠오른다. 표시를 누르면 오른쪽에 사건이 열린다.",
         "자료 조사 → 현장 취재 → 인터뷰 → 심층 추적 순으로 사실을 모아 「취재 수첩」을 채운다.",
         "인터뷰 상대는 AI가 연기한다. 질문을 직접 입력하라. 공감·근거·익명 약속은 입을 열게 하고, 넘겨짚기는 닫게 한다.",

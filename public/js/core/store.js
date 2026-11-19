@@ -14,6 +14,11 @@ export function setG(g) {
   if (typeof window !== "undefined") window.__G = g; // 디버깅용
 }
 
+// 현장 취재(3D)로 진행하는 장. 이 장에서는 경영 화면과 세계 시뮬레이션을 쓰지 않는다: 세계지도 → 국가 지도 → 사건 → 현장.
+// 장의 정의(campaign/chapters.js)에서 field: true인 장과 같아야 한다 (tests/nation.test.mjs가 본다).
+export const FIELD_CHAPTERS = new Set(["prologue"]);
+export const fieldMode = (g = G) => FIELD_CHAPTERS.has(g?.campaign?.ch);
+
 const SAVE_KEY = "gijeongsasil.save.v1";
 export const SAVE_VERSION = 1;
 
@@ -100,8 +105,11 @@ function readSave(text) {
   // 기존 1버전 세이브에는 기타 수입 항목이 없다.
   const today = g?.outlet?.today;
   if (today && typeof today === "object" && !Array.isArray(today) && !Object.hasOwn(today, "otherIncome")) today.otherIncome = 0;
-  if (g?.v === SAVE_VERSION && matchesSaveShape(g, saveShape)) return g;
-  return null;
+  if (g?.v !== SAVE_VERSION || !matchesSaveShape(g, saveShape)) return null;
+  // 프롤로그가 수능 사건으로 바뀌었다. 옛 프롤로그 도중의 저장은 새 프롤로그의 처음으로 돌린다.
+  const c = g.campaign;
+  if (c.ch === "prologue" && (c.beat !== 0 || !c.flags.quietWorld || c.objectives?.[0]?.items?.[0]?.id !== "nation")) Object.assign(c, { beat: 0, entered: false, objectives: [] });
+  return g;
 }
 
 export function saveGame() {
