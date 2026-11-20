@@ -1,0 +1,114 @@
+/* 기정사실 — 현장 취재 모드의 본 게임 화면과 국가 지도 (세계 → 국가 → 사건 → 현장) */
+
+/* ── 현장 취재 모드: 경영 화면을 치우고 지도만 남긴다 ── */
+#screen-game.field { --dock-w: 0px; }
+#screen-game.field #dock, #screen-game.field #side, #screen-game.field .hud-clock, #screen-game.field .hud-stats, #screen-game.field #mapbar .seg:first-child, #screen-game.field #mapbar .legend { display: none; }
+#screen-game.field .hud-brand { cursor: default; pointer-events: none; }
+.hud-field { display: none; align-items: center; gap: 12px; height: 100%; flex: 1; min-width: 0; padding-left: 14px; border-left: 1px solid var(--line); }
+#screen-game.field .hud-field { display: flex; }
+.hud-field .case { display: flex; flex-direction: column; justify-content: center; line-height: 1.2; min-width: 0; }
+.hud-field .case label { font-size: 10.5px; letter-spacing: 0.16em; color: #ff9c8c; font-weight: 800; }
+.hud-field .case b { font-family: var(--font-serif); font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-field .crumbs { display: flex; align-items: center; gap: 6px; margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--text-3); white-space: nowrap; }
+.hud-field .crumbs span.on { color: var(--gold); }
+.hud-field .crumbs i { width: 14px; height: 1px; background: var(--line-2); }
+.hud-field .sp { flex: 1; }
+.hud-field .hud-loc { cursor: default; }
+.hud-field .hud-menu { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-2); background: transparent; border-radius: 8px; padding: 6px 11px; font-weight: 700; font-size: 12.5px; color: var(--text-2); }
+.hud-field .hud-menu:hover { color: var(--text); background: var(--ink-3); }
+@media (max-width: 900px) { .hud-field .crumbs { display: none; } }
+
+/* 처음 들어설 때 지도 위에 잠깐 뜨는 글 */
+.field-caption { position: absolute; left: 50%; top: 27%; transform: translate(-50%, -50%); z-index: 15; text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.1s var(--ease); text-shadow: 0 2px 22px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.8); }
+.field-caption.in { opacity: 1; }
+.field-caption small { display: block; font-size: 12px; letter-spacing: 0.34em; color: #ff9c8c; font-weight: 800; margin-bottom: 10px; }
+.field-caption b { display: block; font-family: var(--font-serif); font-weight: 700; font-size: clamp(22px, 3vw, 34px); color: #f1ebdd; letter-spacing: 0.02em; }
+.field-caption span { display: block; margin-top: 10px; font-size: 14px; color: var(--text-2); }
+
+/* ── 국가 지도 ── */
+#nation { position: absolute; left: 0; right: 0; top: var(--hud-h); bottom: 0; z-index: 16; overflow: hidden; background: #070b12; opacity: 0; transform: scale(1.035); transition: opacity 0.26s ease, transform 0.5s var(--ease); }
+#nation.in { opacity: 1; transform: none; }
+#screen-game.nation-open #mapbar, #screen-game.nation-open #travel-banner { display: none; }
+.nm-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.nm-pins { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 2; }
+#nation .map-tip { z-index: 6; }
+
+.nm-head { position: absolute; left: 18px; top: 16px; z-index: 4; display: flex; align-items: flex-start; gap: 14px; pointer-events: none; }
+.nm-back { pointer-events: auto; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 13px 0 9px; border-radius: 9px; border: 1px solid var(--line-2); background: rgba(9, 13, 20, 0.9); color: var(--text-2); font-weight: 700; font-size: 13px; backdrop-filter: blur(8px); transition: 0.15s; }
+.nm-back:hover { color: var(--text); border-color: rgba(190, 205, 230, 0.45); transform: translateX(-2px); }
+.nm-eyebrow { font-size: 10.5px; letter-spacing: 0.24em; color: var(--gold); font-weight: 800; }
+.nm-name { font-family: var(--font-serif); font-weight: 900; font-size: 30px; line-height: 1.12; letter-spacing: 0.02em; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.8); }
+.nm-sub { font-size: 12.5px; color: var(--text-2); margin-top: 2px; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); }
+
+.nm-tools { position: absolute; left: 18px; bottom: 16px; z-index: 4; display: flex; align-items: center; gap: 10px; }
+.nm-hint { font-size: 12px; color: var(--text-3); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9); }
+.nm-empty { position: absolute; left: 50%; bottom: 58px; transform: translateX(-50%); z-index: 4; padding: 9px 18px; border-radius: 99px; background: rgba(9, 13, 20, 0.92); border: 1px solid var(--line-2); color: var(--text-2); font-size: 13px; font-weight: 600; white-space: nowrap; }
+/* 왼쪽 아래의 목표 상자와 겹치지 않게 지도 도구를 올린다 */
+#screen-game.nation-open #objective { bottom: 62px; }
+
+/* 현재 위치 */
+.nm-me { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.nm-me i { position: absolute; left: -6px; top: -6px; width: 12px; height: 12px; border-radius: 50%; background: var(--gold); border: 2px solid #0b1018; box-shadow: 0 0 0 0 rgba(210, 169, 90, 0.5); animation: nm-me 2.4s infinite; }
+.nm-me span { position: absolute; left: 12px; top: -9px; font-size: 11px; font-weight: 800; color: var(--gold); white-space: nowrap; text-shadow: 0 0 4px #06090e, 0 0 4px #06090e, 0 1px 6px #06090e; }
+@keyframes nm-me { 70% { box-shadow: 0 0 0 12px rgba(210, 169, 90, 0); } 100% { box-shadow: 0 0 0 0 rgba(210, 169, 90, 0); } }
+
+/* 사건 핀: 점 위에 선 붉은 머리, 그 위에 제목 꼬리표 */
+.nm-pin { position: absolute; left: 0; top: 0; width: 0; height: 0; padding: 0; border: 0; background: none; cursor: pointer; }
+.nm-pin-head { position: absolute; left: -17px; top: -46px; width: 34px; height: 34px; border-radius: 50% 50% 50% 2px; rotate: -45deg; background: linear-gradient(135deg, #f26650, var(--red-2)); border: 2px solid #fff1e8; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55); display: grid; place-items: center; color: #fff6ee; transition: translate 0.2s var(--ease), scale 0.2s var(--ease); }
+.nm-pin-head .ico { rotate: 45deg; }
+.nm-pin:hover .nm-pin-head, .nm-pin.on .nm-pin-head { translate: 0 -4px; scale: 1.08; }
+.nm-pin-ring { position: absolute; left: -9px; top: -5px; width: 18px; height: 10px; border-radius: 50%; border: 2px solid rgba(240, 96, 74, 0.9); animation: nm-ring 2.2s infinite ease-out; pointer-events: none; }
+.nm-pin-ring.late { animation-delay: 1.1s; }
+@keyframes nm-ring { from { scale: 0.5; opacity: 0.95; } to { scale: 4.2; opacity: 0; } }
+.nm-pin-tag { position: absolute; left: 0; top: -58px; translate: -50% -100%; display: flex; align-items: center; gap: 7px; padding: 5px 11px 5px 6px; border-radius: 8px; background: rgba(14, 10, 10, 0.94); border: 1px solid rgba(226, 69, 47, 0.6); color: #f6efe2; font-family: var(--font-serif); font-weight: 700; font-size: 14px; white-space: nowrap; box-shadow: var(--shadow); }
+.nm-pin-tag em { font-style: normal; font-family: var(--font-ui); font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 5px; background: var(--red); color: #fff6ee; }
+.nm-pin.going .nm-pin-tag em { background: var(--gold); color: #1c1508; }
+.nm-pin.done .nm-pin-tag em { background: #2f5a42; color: #d5f3e0; }
+.nm-pin.done .nm-pin-ring { display: none; }
+.nm-pin:focus-visible { outline: none; }
+.nm-pin:focus-visible .nm-pin-head { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* 사건 개요 */
+.nm-card { position: absolute; right: 0; top: 0; bottom: 0; width: 404px; max-width: 100%; z-index: 5; padding: 18px 22px 20px; background: linear-gradient(180deg, rgba(13, 17, 26, 0.975), rgba(9, 12, 19, 0.985)); border-left: 1px solid var(--line-2); box-shadow: -22px 0 48px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 12px; overflow-y: auto; transform: translateX(104%); transition: transform 0.42s var(--ease); }
+#nation.has-card .nm-card { transform: none; }
+.nm-card-top { display: flex; align-items: center; gap: 9px; }
+.nm-x { margin-left: auto; width: 30px; height: 30px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--text-3); display: grid; place-items: center; }
+.nm-x:hover { color: var(--text); background: var(--ink-3); border-color: var(--line-2); }
+.nm-card-eyebrow { font-size: 12px; letter-spacing: 0.3em; color: #ff9c8c; font-weight: 800; margin-top: 6px; }
+.nm-card-title { font-family: var(--font-serif); font-weight: 900; font-size: 34px; line-height: 1.15; letter-spacing: 0.01em; margin-top: -8px; }
+.nm-facts { display: grid; grid-template-columns: 44px 1fr; gap: 7px 10px; margin: 2px 0 0; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.nm-facts dt { color: var(--text-3); font-weight: 700; font-size: 12px; padding-top: 1px; }
+.nm-facts dd { margin: 0; color: var(--text); line-height: 1.5; }
+.nm-outline { background: var(--paper); color: var(--paper-ink); border-radius: 4px; padding: 14px 16px 15px; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(0, 0, 0, 0.06); font-family: var(--font-serif); position: relative; }
+.nm-outline::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--red-2); border-radius: 4px 0 0 4px; }
+.nm-outline-head { font-family: var(--font-ui); font-size: 10.5px; font-weight: 800; letter-spacing: 0.2em; color: var(--paper-ink-2); margin-bottom: 7px; }
+.nm-outline p { font-size: 14.5px; line-height: 1.7; }
+.nm-outline p + p { margin-top: 3px; }
+.nm-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; padding-left: 10px; border-left: 2px solid var(--line-2); }
+.nm-now { margin-top: auto; display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 2px 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.nm-now label { grid-row: span 2; align-self: center; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: var(--gold); padding: 3px 8px; border: 1px solid rgba(210, 169, 90, 0.45); border-radius: 6px; }
+.nm-now b { font-size: 14.5px; }
+.nm-now span { font-size: 12.5px; color: var(--text-2); }
+.nm-actions { display: flex; flex-direction: column; gap: 8px; }
+.nm-go { height: 46px; font-size: 15px; }
+@media (max-width: 860px) { .nm-card { width: 100%; top: auto; max-height: 72%; border-left: 0; border-top: 1px solid var(--line-2); transform: translateY(104%); } .nm-name { font-size: 24px; } .nm-hint { display: none; } #screen-game.nation-open:has(#nation.has-card) #objective { display: none; } }
+
+/* 떠날 때: 핀과 글씨가 걷히고 어두워진 뒤, 닿은 곳과 시각이 뜬다 */
+.nm-veil { position: absolute; inset: 0; z-index: 8; background: radial-gradient(circle at 50% 50%, rgba(6, 9, 14, 0.2), #06090e 68%); opacity: 0; pointer-events: none; display: grid; place-items: center; transition: opacity 1.15s ease-in 0.25s, background-color 0.6s; }
+#nation.leaving .nm-veil { opacity: 1; pointer-events: auto; }
+#nation.arrived .nm-veil { background-color: #06090e; }
+#nation.leaving .nm-head, #nation.leaving .nm-tools, #nation.leaving .nm-pins, #nation.leaving .nm-empty { opacity: 0; transition: opacity 0.4s; }
+#nation.leaving .nm-card { transform: translateX(104%); }
+#screen-game.nation-leaving #objective, #screen-game.nation-leaving #hud > * { opacity: 0; transition: opacity 0.7s; pointer-events: none; }
+.nm-arrive { text-align: center; opacity: 0; translate: 0 10px; transition: opacity 0.7s ease, translate 0.9s var(--ease); padding: 0 24px; }
+#nation.arrived .nm-arrive { opacity: 1; translate: 0 0; }
+.nm-arrive-eyebrow { font-size: 12px; letter-spacing: 0.5em; padding-left: 0.5em; color: #ff9c8c; font-weight: 800; }
+.nm-arrive-place { font-family: var(--font-serif); font-weight: 900; font-size: clamp(24px, 3.6vw, 42px); color: #f1ebdd; margin-top: 14px; line-height: 1.25; }
+.nm-arrive-rule { display: block; height: 2px; width: 0; margin: 18px auto 14px; background: var(--red); transition: width 0.9s var(--ease) 0.25s; }
+#nation.arrived .nm-arrive-rule { width: 140px; }
+.nm-arrive-clock { font-size: 16px; color: var(--text-2); letter-spacing: 0.08em; }
+
+@media (prefers-reduced-motion: reduce) {
+  #nation, .nm-card, .nm-veil, .nm-arrive, .nm-arrive-rule, .field-caption { transition-duration: 0.01s; transition-delay: 0s; }
+  .nm-pin-ring, .nm-me i { animation: none; }
+}
