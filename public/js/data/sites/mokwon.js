@@ -44,9 +44,9 @@ export const MOKWON_ROOM12 = {
       hints: ["책상 위만 보지 않는다. 상판 밑과, 책상 줄 사이의 바닥도 본다."] },
     { id: "q_link", text: "가루와 사다리 자국은 무슨 사이인가", sub: "증거판(B)에서 두 장을 잇는다", board: true, cards: ["I5"], when: { evidence: ["C1", "C2"] },
       hints: ["둘은 어긋나지 않는다. 같은 쪽을 가리킨다.", "석고 가루와 사다리 자국을 '같다'로 잇는다."] },
-    { id: "q_above", text: "24번 자리 위에는 무엇이 있나", cards: ["C5"], when: { flags: ["look_up"] },
+    { id: "q_above", text: "24번 자리 위에는 무엇이 있나", cards: ["C5"], when: { flags: ["look_up"], notFlags: ["device_gone"] },
       hints: ["눈에 보이지 않는 빛도 카메라에는 보인다. F를 누르고 24번 위 천장을 화면 가운데에 붙든다."] },
-    { id: "q_reach", text: "저 구멍까지 어떻게 올라가나", cards: ["C6"], when: { flags: ["ceiling_found"] },
+    { id: "q_reach", text: "24번 자리 위 천장을 직접 확인한다", cards: ["C6"], when: { flags: ["ladder_borrowed"] },
       hints: ["뒷문 옆의 사다리를 들어, 바닥의 자국 위에 세운다."] },
     { id: "q_who", text: "누가, 언제 이것을 올렸나", cards: ["C7", "C8", "C9", "C10"], when: { flags: ["tile_open"] },
       hints: ["묶여 있는 것을 먼저 알아본다. 그다음에 묶은 방식, 작은 화면, 배관의 스티커."] },
@@ -190,6 +190,13 @@ export const MOKWON_ROOM12 = {
       caption: ["가루는 위에서 떨어졌다. 사다리는 위로 오르는 물건이다.", "시선이 저절로 올라간다. 똑같은 텍스 수십 장."],
       effect: { flags: ["look_up"] },
     },
+    // 빛 신호와 무관하게 천장을 조사한다. 기존 저장에서 올려다보기 연출을 마쳤어도 이 조건은 따로 확인한다.
+    {
+      id: "borrow_ladder", when: { evidence: ["I5"], notFlags: ["ladder_borrowed"] },
+      lookAt: "spot_ladder",
+      caption: ["24번 자리 위를 직접 확인해야 한다.", "\"사다리를 가져올게요.\" 배수정이 시설관리실에 다녀온다. 뒷문 옆에 접이식 사다리가 놓인다."],
+      effect: { flags: ["ladder_borrowed"], show: ["ladder_folded"] },
+    },
   ],
 
   spots: [
@@ -220,14 +227,14 @@ export const MOKWON_ROOM12 = {
     },
     {
       id: "ceiling24", node: "spot_ceiling24", kind: "scan", tool: "phone", label: "24번 위 천장", minutes: 10, radius: 4.2, far: true,
-      showIf: { flags: ["look_up"] }, once: true, keep: true,
+      showIf: { flags: ["look_up"], notFlags: ["device_gone"] }, once: true, keep: true,
       idle: ["똑같은 텍스 수십 장. 맨눈으로는 무엇도 다르지 않다.", "눈에 보이지 않는 빛이라면, 카메라에는 보인다. (F: 휴대폰 카메라)"],
-      text: ["휴대폰 화면 속에서, 텍스 구멍 하나가 보랏빛으로 깜빡인다.", "화면에서 눈을 떼면 아무것도 없다. 아직 켜져 있다.", "\"사다리가 있어야겠네요.\" 배수정이 시설관리실에 다녀온다. 뒷문 옆에 접이식 사다리가 놓인다."],
-      gives: { evidence: ["C5"], flags: ["ceiling_found", "ladder_borrowed"], show: ["ladder_folded"] }, bark: "bark_ir",
+      text: ["휴대폰 화면 속에서, 텍스 구멍 하나가 보랏빛으로 깜빡인다.", "화면에서 눈을 떼면 아무것도 없다. 아직 켜져 있다."],
+      gives: { evidence: ["C5"], flags: ["ceiling_found"] }, bark: "bark_ir",
     },
     {
       id: "ladder", node: "spot_ladder", kind: "object", label: "접이식 사다리", verb: "든다", minutes: 2,
-      showIf: { flags: ["ceiling_found"] }, hideIf: { flags: ["ladder_taken"] },
+      showIf: { flags: ["ladder_borrowed"] }, hideIf: { flags: ["ladder_taken"] },
       text: ["배수정이 시설관리실에서 빌려 온 알루미늄 사다리.", "발에는 격자무늬 고무가 끼워져 있다. 바닥의 자국과 같은 무늬다."],
       gives: { flags: ["ladder_taken"], holding: "ladder", hide: ["ladder_folded"] }, bark: "bark_ladder", instant: true,
     },

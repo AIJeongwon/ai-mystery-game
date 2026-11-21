@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MOKWON_ROOM12 as DEF, SITES } from "../public/js/data/sites/mokwon.js";
-import { newSiteState, lockOpen, spotStatus, useSpot, apply, nodeVisible, currentQuestion, questionProgress, runDeadlines, nextDeadline, fmtClock, daylight, sentences, sayable, acceptNpcReply, ruleNpcReply } from "../public/js/site/state.js";
+import { newSiteState, loadSite, lockOpen, spotStatus, useSpot, apply, nodeVisible, currentQuestion, questionProgress, runDeadlines, nextDeadline, fmtClock, daylight, sentences, sayable, acceptNpcReply, ruleNpcReply } from "../public/js/site/state.js";
 import { makeNav, setBoxEnabled, blocked, step, findPath } from "../public/js/site/nav.js";
 import { RELS, REL_ORDER, boardOf, ownedCards, tryLink, diffWords, compareView, pickCompare, stripAdd, stripRemove, stripView, stripX, dedOpen, dedSlots, dedState, setSlot, checkDeduction, dedSentence, questionsPage, factsPage, pullFact, peoplePage, moodOf, primeBook, bookUnseen, markBookSeen, bookKeys, boardUnseen, hintsLeft, ponder, PONDER_MINUTES } from "../public/js/site/reason.js";
 
@@ -109,7 +109,8 @@ test("현장: LLM 없이 교실 조사를 끝까지 따라갈 수 있다", () =>
   const made = link(st, "C1", "C2", "same");
   assert.ok(made.ok && made.id === "I5" && made.close, "잇는 순간 판이 덮이고 눈길이 위로 간다");
   assert.ok(st.flags.look_up && "I5" in st.evidence);
-  assert.equal(currentQuestion(DEF, st).id, "q_above");
+  assert.equal(currentQuestion(DEF, st).id, "q_reach");
+  assert.ok(st.flags.ladder_borrowed && !st.flags.ceiling_found, "위쪽을 조사할 근거가 생기면 빛 신호 없이도 사다리를 빌린다");
   look(st, "floor_old");
   look(st, "desk24_under");
   assert.deepEqual(questionProgress(DEF.questions[0], st), [4, 4]);
@@ -117,7 +118,7 @@ test("현장: LLM 없이 교실 조사를 끝까지 따라갈 수 있다", () =>
   look(st, "ceiling24");
   assert.ok("C5" in st.evidence && st.flags.ceiling_found);
   assert.equal(spotStatus(spot("ceiling24"), st), "done", "한 번 찾은 구멍은 표시만 남는다");
-  assert.equal(nodeVisible(DEF, st, "ladder_folded"), true, "배수정이 사다리를 빌려 온다");
+  assert.equal(nodeVisible(DEF, st, "ladder_folded"), true, "단서를 연결한 뒤 빌린 사다리가 놓여 있다");
 
   look(st, "ladder");
   assert.equal(st.holding, "ladder");
@@ -188,6 +189,84 @@ test("현장: 토요일 새벽 5시가 지나면 장치는 사라지고 흔적�
   examine(st, "plenum_empty", "ties");
   examine(st, "plenum_empty", "sticker");
   assert.ok("C8" in st.evidence && "C9" in st.evidence && !("C7" in st.evidence), "장치는 못 봐도 묶은 사람의 흔적은 남는다");
+});
+
+test("현장: 토요일에는 빛 신호 없이 사다리를 얻어 남은 흔적으로 추리한다", () => {
+  const st = newSiteState(DEF);
+  st.minute = 1440 + 9 * 60 + 20;
+  settle(st);
+  assert.ok(st.flags.device_gone);
+  assert.equal(spotStatus(spot("ladder"), st), "hidden");
+  look(st, "desk24");
+  look(st, "floor_ladder");
+  assert.equal(spotStatus(spot("ladder"), st), "hidden", "단서를 모은 뒤 연결하는 과정이 필요하다");
+  assert.ok(link(st, "C1", "C2", "same").ok);
+  assert.equal(spotStatus(spot("ladder"), st), "open");
+  assert.equal(spotStatus(spot("ceiling24"), st), "hidden", "사라진 장치의 빛을 찾도록 안내하지 않는다");
+  assert.equal(currentQuestion(DEF, st).id, "q_reach");
+
+  for (const id of ["ladder", "ladder_place", "ladder_climb", "tile24", "tile24_push", "plenum_empty"]) {
+    assert.equal(spotStatus(spot(id), st), "open", id);
+    look(st, id);
+  }
+  assert.equal(spotStatus(spot("plenum"), st), "hidden");
+  examine(st, "plenum_empty", "ties");
+  examine(st, "plenum_empty", "sticker");
+  assert.ok("C8" in st.evidence && "C9" in st.evidence);
+  for (const id of ["C5", "C7", "C10", "C11"]) assert.ok(!(id in st.evidence), `${id}는 회수된 장치에서 얻을 수 없다`);
+  look(st, "ladder_down");
+
+  const said = ruleNpcReply(bae, { trust: 60, shown: ["C2"], text: "", evidence: st.evidence, said: ["b1"], turn: 1 });
+  apply(st, { evidence: said.revealed.map((id) => bae.facts.find((f) => f.id === id).gives), minutes: 4 });
+  assert.equal(link(st, "C29", "C9", "time").id, "I12");
+  const ded = dedOpen(DEF, st)[0];
+  assert.deepEqual(dedSlots(ded, st), ["where", "who", "up"]);
+  for (const [slot, card] of [["where", "I5"], ["who", "I12"], ["up", "C9"]]) assert.ok(setSlot(DEF, st, "night", slot, card));
+  const solved = checkDeduction(DEF, st, "night");
+  assert.ok(solved.ok && solved.sentence.endsWith("켠 시각은 아직 모른다."));
+  assert.equal(currentQuestion(DEF, st).id, "q_next");
+});
+
+test("현장: 금요일에도 카메라 확인 전에 사다리를 얻고, 신호를 찾아도 사다리가 다시 생기지 않는다", () => {
+  const st = newSiteState(DEF);
+  look(st, "desk24");
+  look(st, "floor_ladder");
+  link(st, "C1", "C2", "same");
+  assert.ok(!("C5" in st.evidence) && !st.flags.ceiling_found);
+  assert.equal(spotStatus(spot("ladder"), st), "open");
+  assert.equal(nodeVisible(DEF, st, "ladder_folded"), true);
+  look(st, "ladder");
+  look(st, "ladder_place");
+  look(st, "ceiling24");
+  assert.ok("C5" in st.evidence && st.flags.ceiling_found, "장치가 남아 있으면 빛 신호도 확인할 수 있다");
+  assert.equal(nodeVisible(DEF, st, "ladder_folded"), false);
+  assert.equal(nodeVisible(DEF, st, "ladder_open"), true);
+  assert.equal(spotStatus(spot("ladder"), st), "hidden");
+});
+
+test("현장: 이미 천장을 올려다본 기존 저장에서도 사다리를 빌릴 수 있다", (t) => {
+  // 이전 코드로 단서 연결까지만 마친 저장은 기존 연출을 다시 실행하지 않는다.
+  const old = owning("C1", "C2");
+  assert.ok(tryLink(DEF, old, "C1", "C2", "same").ok);
+  old.flags.look_up = true;
+  old.flags.trig_look_up = true;
+  old.minute = 1440 + 9 * 60 + 20;
+  const saved = JSON.stringify(old);
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { getItem: () => saved } });
+  t.after(() => {
+    if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+    else delete globalThis.localStorage;
+  });
+  const st = loadSite(DEF);
+  settle(st);
+  assert.ok(st.flags.device_gone && st.flags.ladder_borrowed);
+  assert.ok(!st.flags.ceiling_found && !("C5" in st.evidence));
+  assert.equal(spotStatus(spot("ladder"), st), "open");
+  look(st, "ladder");
+  look(st, "ladder_place");
+  settle(st);
+  assert.equal(nodeVisible(DEF, st, "ladder_folded"), false, "저장에 없던 연출 때문에 사다리가 중복되지 않는다");
 });
 
 test("현장 대화: 말할 수 있는 것은 규칙이 정한다", () => {
