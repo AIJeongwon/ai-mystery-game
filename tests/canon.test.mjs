@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { advance } from "../public/js/sim/clock.js";
 import { cd } from "../public/js/sim/world.js";
-import { resolveDecree, enact, plantCanon, retract, revertCanon, canonHourly } from "../public/js/sim/canon.js";
+import { resolveDecree, enact, plantCanon, retract, revertCanon, canonHourly, addInk, upgradeStamp } from "../public/js/sim/canon.js";
 import { commonSense } from "../public/js/sim/lore.js";
 import { decreeTargets } from "../public/js/llm/prompts.js";
 import { STAMP, INK_CAP } from "../public/js/data/progress.js";
@@ -123,16 +123,37 @@ test("문장 소멸은 의제의 실제 변화량 중 기존 규칙인 60퍼센�
   assert.ok(Math.abs(agenda.heat - 32.4) < 1e-9);
 });
 
-// 알려진 문제(docs/roadmap/known-issues.md의 A-1): 인주 상한이 낮아 각 각인의 마지막 단계를 살 수 없다.
-// 고치면 todo 표시를 떼어 이 시험이 계속 지키게 한다.
-test("각인: 인주 상한 안에서 모든 단계를 살 수 있다", { todo: "알려진 문제 A-1 — 인주 상한이 마지막 단계 값보다 낮다" }, () => {
-  const lv = { scope: 1, power: 1, hold: 1, slots: 1, veil: 1 };
+// 강화 비용과 인주 상한이 다시 어긋나지 않도록 실제 구매 경로를 검사한다.
+test("각인: 인주 상한 안에서 모든 단계를 살 수 있다", () => {
+  const g = fresh(97);
+  g.canon.unlocked = true;
+  const lv = g.canon.lv;
+  assert.equal(INK_CAP(lv), 30, "초기 인주 상한은 유지한다");
   for (;;) {
     const cap = INK_CAP(lv);
     const next = Object.keys(lv).filter((k) => lv[k] < STAMP[k].max && STAMP[k].cost[lv[k]] <= cap).sort((a, b) => STAMP[a].cost[lv[a]] - STAMP[b].cost[lv[b]])[0];
     if (!next) break;
-    lv[next]++;
+    addInk(cap);
+    const before = g.canon.ink, cost = STAMP[next].cost[lv[next]];
+    assert.equal(upgradeStamp(next), true);
+    assert.equal(g.canon.ink, before - cost, "강화 비용은 기존 값대로 소모한다");
   }
   const stuck = Object.keys(lv).filter((k) => lv[k] < STAMP[k].max).map((k) => `${STAMP[k].name} ${lv[k]}→${lv[k] + 1}단 (인주 ${STAMP[k].cost[lv[k]]}, 상한 ${INK_CAP(lv)})`);
   assert.deepEqual(stuck, []);
+});
+
+test("최대 강화 후 세계 범위 세기 5의 문장을 실제로 찍을 수 있다", () => {
+  const g = fresh(101);
+  g.canon.unlocked = true;
+  for (const [key, def] of Object.entries(STAMP)) g.canon.lv[key] = def.max;
+  addInk(INK_CAP(g.canon.lv) * 2);
+  assert.equal(g.canon.ink, 430);
+  const ap = resolveDecree("대한민국 정부의 지지가 세계적으로 높아졌다.", {
+    belief: "대한민국 정부의 지지가 세계적으로 높아졌다", valid: true, scope: "world", reaction: "",
+    effects: [{ target: "country:410", attr: "appr", dir: "up", mag: 5 }],
+  }, decreeTargets(null), null);
+  assert.equal(ap.cost, 419);
+  assert.ok(ap.ok, ap.problems.join(" / "));
+  assert.ok(enact(ap, { articleId: "max_ink_test", title: "시험" }));
+  assert.equal(g.canon.ink, 11);
 });
