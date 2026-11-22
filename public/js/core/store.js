@@ -3,6 +3,7 @@ import { bindRng, bindIds, hash01, clamp } from "./util.js";
 import { COUNTRIES } from "../data/countries.js";
 import { OUTLETS, RIVAL_IDS, ACTORS, AGENDAS, HOME, CAT_KEYS } from "../data/world.js";
 import { ECON } from "../data/progress.js";
+import { captureFieldSave, fieldSaveWrites, writeStorage } from "./field-save.js";
 
 export let G = null;
 export function setG(g) {
@@ -155,12 +156,17 @@ export function deleteSave() {
   } catch { /* 무시 */ }
 }
 export function exportSave() {
-  return JSON.stringify(G);
+  const fieldwork = captureFieldSave();
+  return JSON.stringify(Object.keys(fieldwork.sites).length || Object.keys(fieldwork.photos).length ? { ...G, fieldwork } : G);
 }
 export function importSave(text) {
-  const g = readSave(text);
+  let file;
+  try { file = JSON.parse(text); } catch { throw new Error("세이브 형식이 맞지 않습니다"); }
+  if (!file || typeof file !== "object" || Array.isArray(file)) throw new Error("세이브 형식이 맞지 않습니다");
+  const { fieldwork = { v: 1, sites: {}, photos: {} }, ...game } = file;
+  const g = readSave(JSON.stringify(game));
   if (!g) throw new Error("세이브 형식이 맞지 않습니다");
-  localStorage.setItem(SAVE_KEY, JSON.stringify(g));
+  writeStorage([...fieldSaveWrites(fieldwork), [SAVE_KEY, JSON.stringify(g)]]);
   return g;
 }
 

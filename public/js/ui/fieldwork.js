@@ -10,7 +10,7 @@ import { setFieldStep } from "./hud.js";
 import { openNation, closeNation, nationOpen } from "./nation.js";
 import { NATION_MAPS, hasNationMap, HOME_BASE, casesIn, caseCounts } from "../data/cases.js";
 import { COUNTRIES } from "../data/countries.js";
-import { loadSaved, fmtClock } from "../site/state.js";
+import { fmtClock } from "../site/state.js";
 import { sfx } from "../audio.js";
 
 let bound = false;
@@ -23,7 +23,11 @@ async function readStatus(c, st) {
   const { SITES } = await import("../data/sites/index.js"); // 현장의 자료는 필요할 때만 읽는다
   return { started: true, done: Boolean(st.flags?.[`${c.id}_done`]), clock: fmtClock(st.minute), place: SITES[st.at]?.place || "" };
 }
-const statusOf = (c) => readStatus(c, G.campaign.flags.departed ? loadSaved(c.id) : null);
+async function savedCase(c) {
+  const { loadCaseProgress } = await import("../site/progress.js");
+  return loadCaseProgress(c.id)?.state || null;
+}
+const statusOf = async (c) => readStatus(c, G.campaign.flags.departed ? await savedCase(c) : null);
 const siteUrl = (c, restart) => `/site.html?case=${encodeURIComponent(c.id)}${restart ? "&fresh" : ""}`;
 
 function tipOf(feat) {
@@ -61,7 +65,7 @@ export async function enterNation(id, focus) {
       beforeDepart: async (c, { restart }) => {
         if (restart) return (await confirmDialog("지금까지의 취재 기록을 지우고 처음부터 다시 합니까?", { title: "처음부터 다시", danger: true, yes: "처음부터 다시" })) ? { restart: true } : false;
         if (c.status.started) return { restart: false };
-        const old = loadSaved(c.id);
+        const old = await savedCase(c);
         if (!old?.at) return { restart: true };
         const wipe = await confirmDialog(`이 컴퓨터에 이 사건을 취재하던 기록이 남아 있다 (${fmtClock(old.minute)}). 지우고 처음부터 합니까?`, { title: "남아 있는 취재 기록", danger: true, yes: "지우고 처음부터", no: "이어서 한다" });
         return wipe ? { restart: true } : { restart: false, status: await readStatus(c, old) };

@@ -1,6 +1,7 @@
 // 기자가 찍은 사진 — 증거를 얻는 순간의 화면을 작게 줄여 둔다. 증거판의 카드에 그 사진이 붙는다.
 // 저장은 현장 상태와 따로 한다(크기가 크다). 저장소가 차면 사진 없이 간다.
-const KEY = "gijeongsasil.site.photo.";
+import { PHOTO_PREFIX } from "../core/field-save.js";
+const KEY = PHOTO_PREFIX;
 const W = 320, H = 240;
 
 export function loadPhotos(site) {

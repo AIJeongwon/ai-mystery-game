@@ -1,7 +1,8 @@
 // 현장의 상태와 규칙 — 화면을 모른다. 시계, 잠금, 얻은 것, 저장.
 // 판정은 모두 여기서 한다. 3D와 LLM은 이 결과를 보여 줄 뿐이다.
+import { SITE_PREFIX } from "../core/field-save.js";
 
-const KEY = "gijeongsasil.site.";
+const KEY = SITE_PREFIX;
 const DAYS = ["금요일", "토요일", "일요일", "월요일", "화요일"]; // 0분 = 금요일(D+1) 0시
 
 // 여러 장소가 한 사건의 상태를 함께 쓸 때는 def.save가 저장 이름이다 (프롤로그의 네 장소).
@@ -10,6 +11,7 @@ export const saveKeyOf = (def) => def.save || def.id;
 export function newSiteState(def) {
   return {
     site: saveKeyOf(def),
+    runId: crypto.randomUUID(), // 새로 시작한 취재와 예전 취재의 기록을 섞지 않는다.
     at: def.id, //     지금 있는 장소
     visits: {}, //     장소 id → 들어선 횟수
     minute: def.start.minute,
@@ -204,6 +206,7 @@ export function loadSite(def) {
     const st = JSON.parse(raw);
     if (!st || st.site !== saveKeyOf(def)) return null;
     const base = newSiteState(def), out = { ...base, ...st };
+    out.runId = runIdOf(st);
     // 예전 저장에는 이어받은 카드와 증거판이 없다. 빠진 것만 채운다.
     for (const [id, at] of Object.entries(base.evidence)) out.evidence[id] ??= at;
     out.board = { ...base.board, ...(st.board || {}) };
@@ -248,6 +251,7 @@ export function travelTo(def, st, placeId) {
 // 다음 현장이 모르는 카드는 넘기지 않는다. 시각은 뒤로 가지 않는다.
 export function carryInto(def, from) {
   const st = newSiteState(def);
+  st.runId = runIdOf(from);
   st.evidence = Object.fromEntries(Object.entries(from.evidence).filter(([id]) => def.evidence[id]));
   st.statements = [...(from.statements || [])];
   st.npc = JSON.parse(JSON.stringify(from.npc || {}));
@@ -266,3 +270,6 @@ export function loadSaved(key) {
     return null;
   }
 }
+
+// 기존 저장에도 같은 사건에서 이어 온 기록임을 비교할 수 있는 값을 부여한다.
+export const runIdOf = (st) => st.runId || `legacy:${st.carried || st.site}`;
