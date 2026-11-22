@@ -1,5 +1,5 @@
 // 기정사실(記定事實) — 진입점
-import { G, setG, saveGame, newGame } from "./core/store.js";
+import { G, setG, saveGame, newGame, loadGame, fieldMode } from "./core/store.js";
 import { on, emit } from "./core/bus.js";
 import { fmtWon, fmtNum } from "./core/util.js";
 import { checkHealth, llm, llmReasonText } from "./llm/api.js";
@@ -10,6 +10,7 @@ import { bindDetail, showFeed, showEvent } from "./ui/detail.js";
 import { bindPanels, closeDrawer, openDrawer } from "./ui/panels.js";
 import { bindCasefile } from "./ui/casefile.js";
 import { showTitle, hideTitle, openHelp } from "./ui/title.js";
+import { startFieldwork } from "./ui/fieldwork.js";
 import { initDirector } from "./sim/director.js";
 import { initChronicle } from "./sim/chronicle.js";
 import { initPress, refreshCandidates } from "./sim/press.js";
@@ -43,8 +44,12 @@ function startGame(g, isNew) {
   bindNotifications();
   showFeed();
   renderObjective();
-  startClock();
-  music("game");
+  // 현장 취재로 진행하는 장에서는 세계의 시계를 돌리지 않는다 (시간은 현장에서 흐른다)
+  const field = fieldMode(g);
+  startFieldwork(isNew);
+  if (field) stopClock();
+  else startClock();
+  music(field ? "quiet" : "game");
   setTimeout(() => focusCountry(g.player.loc, undefined), 400);
   startCampaign();
   if (isNew && g.campaign.flags.prologueDone) {
@@ -116,7 +121,7 @@ function bindNotifications() {
   on("llm:lost", () => G && toast(llmReasonText(), "bad", 8000));
   // 끊긴 연결(하루 한도·네트워크)은 5분마다 다시 확인한다
   setInterval(() => G && !llm.online && checkHealth(), 300_000);
-  on("ui:objective", () => G.campaign.flags.caseOpen && openDrawer("case"));
+  on("ui:objective", () => !fieldMode() && G.campaign.flags.caseOpen && openDrawer("case"));
   window.addEventListener("beforeunload", () => G && saveGame());
 }
 
@@ -124,8 +129,13 @@ async function boot() {
   const fonts = document.fonts?.ready ?? Promise.resolve();
   await Promise.all([checkHealth(), loadMap(), Promise.race([fonts, new Promise((r) => setTimeout(r, 2500))])]);
   const q = new URLSearchParams(location.search);
+  const saved = q.has("resume") ? loadGame() : null;
   if (q.has("dev")) {
     startGame(newGame({ reporter: "한서진", outlet: "새벽신문", skipPrologue: q.has("skip"), seed: 20310303 }), true);
+  } else if (saved) {
+    // 현장에서 돌아왔다: 타이틀을 거치지 않고 저장을 잇는다 (/?resume)
+    history.replaceState(null, "", location.pathname);
+    startGame(saved, false);
   } else showTitle(startGame);
   $("#boot").classList.add("out");
   setTimeout(() => $("#boot").remove(), 600);

@@ -1,5 +1,5 @@
 // 상단 HUD · 도크 · 지도 도구 · 목표 표시
-import { G } from "../core/store.js";
+import { G, fieldMode } from "../core/store.js";
 import { on, emit } from "../core/bus.js";
 import { fmtDate, fmtTime, fmtWon, fmtNum, clamp } from "../core/util.js";
 import { h, $, mount, icon, sealSvg, bar, modalOpen } from "./dom.js";
@@ -37,6 +37,16 @@ export function buildHud() {
   const inkEl = stat("ink", "인주 印朱", "도장을 찍는 데 쓰는 인주. 기사가 읽힐수록 차오른다.");
   inkEl.append(refs.inkBar);
   refs.loc = h("span");
+  // 현장 취재 모드에서는 경영 숫자 대신 지금 하는 일을 보여 준다 (css/nation.css가 갈아 끼운다)
+  refs.fieldCase = h("b");
+  refs.fieldLoc = h("span");
+  const crumb = (key, text) => (refs["crumb_" + key] = h("span", text));
+  refs.field = h("div.hud-field",
+    h("div.case", h("label", "현장 취재"), refs.fieldCase),
+    h("div.crumbs", crumb("world", "세계지도"), h("i"), crumb("nation", "국가 지도"), h("i"), crumb("case", "사건"), h("i"), crumb("site", "현장")),
+    h("div.sp"),
+    h("div.hud-loc", icon("pin", 14), refs.fieldLoc),
+    h("button.hud-menu", { title: "저장, 소리, 타이틀로", onclick: () => { sfx("click"); emit("ui:drawer", "menu"); } }, icon("menu", 15), "메뉴"));
   mount(hud,
     h("div.hud-brand", { title: "경영 화면 열기", onclick: () => emit("ui:drawer", "manage") }, h("span.hud-seal", { html: sealSvg(34) }), h("div", refs.name, refs.tier)),
     h("div.hud-clock", h("div.hud-date", refs.date, refs.time), refs.speed, refs.llm),
@@ -49,6 +59,7 @@ export function buildHud() {
       stat("lv", "기자 레벨", "기사를 쓰면 경험치가 쌓인다. 레벨이 오르면 역량 점수를 얻는다."),
       h("div.hud-stat", { style: { minWidth: "auto" } }, h("div.hud-loc", { title: "현재 위치로 이동", onclick: () => focusCountry(G.player.loc) }, icon("pin", 14), refs.loc)),
     ),
+    refs.field,
   );
   buildDock();
   buildMapbar();
@@ -117,6 +128,8 @@ export function updateHud(force) {
   refs.lv.textContent = `Lv.${G.player.level}${G.player.pts ? ` ★${G.player.pts}` : ""}`;
   refs.lv.style.color = G.player.pts ? "var(--gold)" : "";
   refs.loc.textContent = G.player.travel ? "이동 중" : `${cname(G.player.loc)} ${G.player.city}`;
+  refs.fieldLoc.textContent = `${cname(G.player.loc)} ${G.player.city}`;
+  if (fieldMode()) refs.fieldCase.textContent = G.campaign.objectives?.[0]?.chapter || "";
   if (!force && prev.cash != null) {
     if (Math.abs(cur.cash - prev.cash) >= 100000) floatDelta("cash", cur.cash - prev.cash, (v) => fmtWon(v).replace("₩", ""));
     if (Math.abs(cur.cred - prev.cred) >= 0.4) floatDelta("cred", cur.cred - prev.cred, (v) => v.toFixed(1));
@@ -135,6 +148,10 @@ function syncSpeed() {
     b.classList.toggle("on", on);
     b.classList.toggle("paused", on && sp === 0);
   }
+}
+// 현장 취재 모드에서 지금 어느 단계에 있는지: "world" | "nation" | "case" | "site"
+export function setFieldStep(step) {
+  for (const k of ["world", "nation", "case", "site"]) refs["crumb_" + k]?.classList.toggle("on", k === step);
 }
 export function setDockActive(key) {
   for (const d of DRAWERS) refs["dock_" + d.key]?.classList.toggle("on", d.key === key);
@@ -171,6 +188,7 @@ export function bindHud() {
   on("speed", syncSpeed);
   on("hold", syncSpeed);
   on("objective", renderObjective);
+  on("objective", () => updateHud());
   on("llm:status", () => refs.llm?.classList.toggle("on", llm.online));
   on("llm:busy", (n) => refs.llm?.classList.toggle("busy", n > 0));
   refs.llm?.classList.toggle("on", llm.online);
@@ -179,6 +197,7 @@ export function bindHud() {
     const tag = e.target.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
     if (modalOpen() || isHeld()) return;
+    if (fieldMode()) return void (e.key === "Escape" && emit("ui:escape")); // 현장 취재 모드에는 시계가 없다
     if (e.code === "Space") {
       e.preventDefault();
       setSpeed(G.time.speed ? 0 : G.time.lastSpeed || 1);

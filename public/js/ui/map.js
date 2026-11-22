@@ -27,8 +27,17 @@ const M = {
   feats: [], byKey: new Map(), projection: null, sphere: null, grat: null,
   mode: "base", dirty: true, hoverKey: null, hoverEv: null, selCountry: null, selEvent: null,
   markers: [], drag: null, anim: null, ripples: [], travel: null, raf: 0, t0: performance.now(),
+  field: null, badgeHits: [],
 };
 export const mapState = M;
+
+// 현장 취재 모드의 세계지도: 경영 표시(경쟁사, 지국)를 그리지 않고, 들어갈 수 있는 나라에 테를 두르고 사건 수를 띄운다.
+//   setField({ open: [나라 번호], badges: [{ country, text }], tip: (feat) => html })   끄려면 setField(null)
+export function setField(opts) {
+  M.field = opts || null;
+  M.badgeHits = [];
+  M.dirty = true;
+}
 
 const keyOf = (f) => f.id ?? `x:${f.properties.name}`;
 
@@ -287,6 +296,7 @@ function drawFx(ts) {
     }
     ctx.restore();
   };
+  if (M.field) for (const key of M.field.open || []) if (key !== M.hoverKey) hl(key, "rgba(210,169,90,0.6)", 1.1, "rgba(210,169,90,0.07)");
   if (M.selCountry) hl(M.selCountry, "rgba(226,69,47,0.95)", 1.8, "rgba(226,69,47,0.10)");
   if (M.hoverKey && M.hoverKey !== M.selCountry) hl(M.hoverKey, "rgba(235,225,200,0.75)", 1.2, "rgba(255,255,255,0.05)");
 
@@ -312,7 +322,7 @@ function drawFx(ts) {
   }
 
   // 경쟁사 본사
-  if (k > M.kMin * 1.25 || M.mode === "share") {
+  if (!M.field && (k > M.kMin * 1.25 || M.mode === "share")) {
     for (const rid of RIVAL_IDS) {
       const o = OUTLETS[rid];
       const c = COUNTRIES[o.hq];
@@ -333,7 +343,7 @@ function drawFx(ts) {
   }
 
   // 지국
-  for (const id of [HOME, ...G.outlet.bureaus]) {
+  for (const id of M.field ? [] : [HOME, ...G.outlet.bureaus]) {
     const c = COUNTRIES[id];
     const [sx, sy] = toScreen(M.projection([c.lon, c.lat]));
     ctx.fillStyle = "#0b1018";
@@ -349,7 +359,7 @@ function drawFx(ts) {
 
   // 사건 마커
   M.markers.length = 0;
-  const evs = knownEvents().filter((e) => e.stage < 4 || G.time.min - e.closedAt < 240);
+  const evs = M.field ? [] : knownEvents().filter((e) => e.stage < 4 || G.time.min - e.closedAt < 240);
   const groups = new Map();
   for (const ev of evs) {
     const key = `${ev.lon.toFixed(1)},${ev.lat.toFixed(1)}`;
@@ -415,7 +425,43 @@ function drawFx(ts) {
     ctx.fillStyle = "#0b1018";
     ctx.fill();
   }
+
+  // 나라 위의 사건 수 (현장 취재 모드)
+  M.badgeHits.length = 0;
+  for (const b of M.field?.badges || []) {
+    const c = COUNTRIES[b.country];
+    if (!c) continue;
+    const [sx, sy] = toScreen(M.projection([c.lon, c.lat]));
+    if (sx < -60 || sy < -40 || sx > M.w + 60 || sy > M.h + 40) continue;
+    for (let j = 0; j < 2; j++) {
+      const a = (t * 0.55 + j * 0.5) % 1;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 6 + a * 30, 0, TAU);
+      ctx.strokeStyle = `rgba(240,96,74,${0.7 * (1 - a)})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.font = `800 12px "Pretendard Variable", Pretendard, sans-serif`;
+    const tw = ctx.measureText(b.text).width, bw = tw + 18, bh = 22;
+    const bx = sx + 13, by = sy - 44 + Math.sin(t * 2.2) * 1.5;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 6);
+    ctx.fillStyle = "#e2452f";
+    ctx.strokeStyle = "#fff1e8";
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 10 * M.dpr;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.stroke();
+    ctx.fillStyle = "#fff6ee";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(b.text, bx + bw / 2, by + bh / 2 + 0.5);
+    M.badgeHits.push({ key: b.country, x: bx, y: by, w: bw, h: bh });
+  }
 }
+const pickBadge = (sx, sy) => M.badgeHits.find((b) => sx >= b.x - 4 && sx <= b.x + b.w + 4 && sy >= b.y - 4 && sy <= b.y + b.h + 4)?.key ?? null;
 function hqCity(o) {
   const HQ = { 런던: [-0.13, 51.51], 뉴욕: [-74.0, 40.71], 서울: [126.86, 37.5], 싱가포르: [103.82, 1.35], 파리: [2.35, 48.86], 로스앤젤레스: [-118.24, 34.05], 도쿄: [139.69, 35.69], 상파울루: [-46.63, -23.55], 나이로비: [36.92, -1.2] };
   return HQ[o.city] || [COUNTRIES[o.hq].lon, COUNTRIES[o.hq].lat];
@@ -552,11 +598,12 @@ function bindInput() {
     }
     const ev = pickMarker(sx, sy);
     M.hoverEv = ev?.id ?? null;
-    const feat = ev ? null : pickCountry(sx, sy);
+    const badge = ev ? null : pickBadge(sx, sy);
+    const feat = ev ? null : badge ? M.byKey.get(badge) : pickCountry(sx, sy);
     M.hoverKey = feat?.playable ? feat.key : null;
     el.style.cursor = ev || M.hoverKey ? "pointer" : "grab";
     if (ev) showTip(sx, sy, evTip(ev));
-    else if (M.hoverKey) showTip(sx, sy, countryTip(feat));
+    else if (M.hoverKey) showTip(sx, sy, M.field?.tip?.(feat) ?? countryTip(feat));
     else hideTip();
   });
   const up = (e) => {
@@ -569,6 +616,8 @@ function bindInput() {
     const sx = e.clientX - r.left, sy = e.clientY - r.top;
     const ev = pickMarker(sx, sy);
     if (ev) return emit("map:event", ev);
+    const badge = pickBadge(sx, sy);
+    if (badge) return emit("map:country", badge);
     const feat = pickCountry(sx, sy);
     if (feat?.playable) emit("map:country", feat.key);
     else emit("map:blank");
