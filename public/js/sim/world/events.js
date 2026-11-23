@@ -95,9 +95,11 @@ export function closeEvent(ev, forced) {
   const thresh = 24 + ev.sig * 9;
   const P = ev.pressure + ev.bias * 14;
   const hi = forced?.hi ?? P >= thresh;
-  ev.outcome = { hi, text: forced?.text ?? T.out?.[hi ? 0 : 1] ?? "사건은 마무리됐다" };
+  const outcomeIdx = hi ? 0 : 1;
+  ev.outcome = { hi, text: forced?.text ?? T.out?.[outcomeIdx] ?? "사건은 마무리됐다" };
   const mul = hi ? 1.25 : 0.45;
-  const imp = T.impact || {};
+  // 결말별로 지정한 항목만 덮어쓴다. 높은 언론 압력이 항상 긍정적인 효과를 뜻하지는 않는다.
+  const imp = { ...T.impact, ...T.outcomeImpact?.[outcomeIdx] };
   const d = cd(ev.country);
   if (d) {
     if (imp.stab) d.stab = clamp(d.stab + imp.stab * 4 * mul, 2, 98);

@@ -27,6 +27,7 @@ export default {
   media_deal: T("med", "언론사 인수", {
     sig: [2, 3], start: 0, actor: "corp", w: () => 0.2,
     impact: { press: -0.3 },
+    outcomeImpact: [{}, { press: 0 }], // 인수가 좌초되면 편집권에 대한 영향도 발생하지 않는다.
     hint: "자본의 언론사 인수. 인수자의 진짜 의도, 편집권 독립 약속의 허점, 기자들의 집단 반발이 숨은 사실이다.",
     out: ["인수가 승인됐다", "인수는 기자들의 반발로 좌초됐다"],
     fb: {
@@ -50,6 +51,7 @@ export default {
   press_freedom: T("med", "언론 자유 침해", {
     sig: [2, 4], w: (c) => 0.1 + unfree(c) * 1.1,
     impact: { press: -0.6, stab: -0.2 },
+    outcomeImpact: [{ press: 0.6 }, {}], // 석방은 언론 자유 회복, 기소는 기본 하락 효과를 적용한다.
     hint: "기자 구금·압수수색·보도 통제. 적용 혐의, 실제로 문제 삼은 기사, 국제 사회의 반응이 숨은 사실이다.",
     out: ["기자가 석방됐다", "기자는 기소됐다"],
     fb: {

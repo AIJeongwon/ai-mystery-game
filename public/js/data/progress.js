@@ -62,7 +62,8 @@ export const STAMP = {
 };
 export const HOLD_MIN = [2 * 1440, 7 * 1440, 30 * 1440, null];
 export const SLOT_COUNT = [1, 2, 3, 5];
-export const INK_CAP = (canonLv) => 30 + (canonLv.scope + canonLv.power + canonLv.hold + canonLv.slots + canonLv.veil - 5) * 12;
+// 모든 각인의 최고 강화 비용과 최대 세기의 세계 문장을 담을 수 있는 상한.
+export const INK_CAP = (canonLv) => 30 + (canonLv.scope + canonLv.power + canonLv.hold + canonLv.slots + canonLv.veil - 5) * 25;
 
 // 기정문 1회 비용
 export function decreeCost(scopeIdx, magnitude) {

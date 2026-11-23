@@ -121,7 +121,7 @@ tools/         regression balance probe / share share-check guest-preview / proc
 - 규칙 서사 틀(`fb`)은 LLM이 없을 때 쓰입니다. 빠뜨리면 규칙 모드에서 그 유형이 깨집니다(콘텐츠 검사가 잡음).
 - 일정으로 잡히게 하려면 `data/agendas.js`의 `SCHEDULE_KINDS`에도 넣습니다.
 - 파일 안의 항목 순서와 `index.js`의 펼치는 순서가 무작위 뽑기의 순서입니다. 유형을 더하거나 옮기면 같은 씨앗에서도 세계가 달라져 회귀 지문이 바뀝니다. 이것은 정상이고 기준선을 새로 적습니다.
-- 종결 영향(`impact`)은 `stab`, `appr`, `econ`, `tens`, `rep`, `attn`, `press`를 반영합니다. 언론 자유는 `world.c[id].press`에 선택 필드로 저장하며, 없으면 나라의 초기값을 읽습니다.
+- 종결 영향(`impact`)은 `stab`, `appr`, `econ`, `tens`, `rep`만 반영됩니다([알려진 문제](../roadmap/known-issues.md) A-18).
 
 **LLM 작업.**
 

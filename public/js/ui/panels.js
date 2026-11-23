@@ -188,10 +188,14 @@ function openMenu() {
       h("button.btn.block", { onclick: () => { saveGame() ? toast("저장했다.", "good") : toast("저장에 실패했다.", "bad"); } }, icon("save", 15), "지금 저장"),
       h("button.btn.block", {
         onclick: () => {
-          const blob = new Blob([exportSave()], { type: "application/json" });
-          const a = h("a", { href: URL.createObjectURL(blob), download: `기정사실_${G.meta.outlet}.json` });
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+          try {
+            const blob = new Blob([exportSave()], { type: "application/json" });
+            const a = h("a", { href: URL.createObjectURL(blob), download: `기정사실_${G.meta.outlet}.json` });
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+          } catch (e) {
+            toast(`내보내지 못했습니다: ${e.message}`, "bad");
+          }
         },
       }, icon("doc", 15), "세이브 파일로 내보내기"),
       h("button.btn.block", { onclick: () => { m.close(); emit("ui:help"); } }, icon("info", 15), "도움말"),

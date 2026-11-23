@@ -8,10 +8,14 @@ node_modules/
 *.log
 server/usage.json
 
-# 저장소에 올리지 않는 큰 파일: 가공 전 원본 이미지, 터널 실행 파일
+# 저장소에 올리지 않는 큰 파일: 가공 전 원본(이미지, 3D 원본 glb와 .blend), 터널 실행 파일
+# 게임이 읽는 3D 에셋(public/assets/3d/)은 Git LFS 없이 일반 파일로 올린다
 tools/_raw/
 tools/bin/
 
 # 운영체제가 만드는 파일
 .DS_Store
 Thumbs.db
+
+# Blender 스크립트를 Python으로 돌릴 때 생기는 파일
+__pycache__/

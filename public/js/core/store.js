@@ -3,6 +3,7 @@ import { bindRng, bindIds, hash01, clamp } from "./util.js";
 import { COUNTRIES } from "../data/countries.js";
 import { OUTLETS, RIVAL_IDS, ACTORS, AGENDAS, HOME, CAT_KEYS } from "../data/world.js";
 import { ECON } from "../data/progress.js";
+import { captureFieldSave, fieldSaveWrites, writeStorage } from "./field-save.js";
 
 export let G = null;
 export function setG(g) {
@@ -13,6 +14,11 @@ export function setG(g) {
   }
   if (typeof window !== "undefined") window.__G = g; // 디버깅용
 }
+
+// 현장 취재(3D)로 진행하는 장. 이 장에서는 경영 화면과 세계 시뮬레이션을 쓰지 않는다: 세계지도 → 국가 지도 → 사건 → 현장.
+// 장의 정의(campaign/chapters.js)에서 field: true인 장과 같아야 한다 (tests/nation.test.mjs가 본다).
+export const FIELD_CHAPTERS = new Set(["prologue"]);
+export const fieldMode = (g = G) => FIELD_CHAPTERS.has(g?.campaign?.ch);
 
 const SAVE_KEY = "gijeongsasil.save.v1";
 export const SAVE_VERSION = 1;
@@ -103,6 +109,9 @@ function readSave(text) {
   if (g?.v !== SAVE_VERSION || !matchesSaveShape(g, saveShape)) return null;
   // 언론 자유가 추가된 저장도 읽되 잘못된 선택 필드는 기존 기록에 반영하지 않는다.
   if (Object.values(g.world.c).some((d) => d?.press !== undefined && (!Number.isFinite(d.press) || d.press < 0 || d.press > 100))) return null;
+  // 프롤로그가 수능 사건으로 바뀌었다. 옛 프롤로그 도중의 저장은 새 프롤로그의 처음으로 돌린다.
+  const c = g.campaign;
+  if (c.ch === "prologue" && (c.beat !== 0 || !c.flags.quietWorld || c.objectives?.[0]?.items?.[0]?.id !== "nation")) Object.assign(c, { beat: 0, entered: false, objectives: [] });
   return g;
 }
 
@@ -149,12 +158,17 @@ export function deleteSave() {
   } catch { /* 무시 */ }
 }
 export function exportSave() {
-  return JSON.stringify(G);
+  const fieldwork = captureFieldSave();
+  return JSON.stringify(Object.keys(fieldwork.sites).length || Object.keys(fieldwork.photos).length ? { ...G, fieldwork } : G);
 }
 export function importSave(text) {
-  const g = readSave(text);
+  let file;
+  try { file = JSON.parse(text); } catch { throw new Error("세이브 형식이 맞지 않습니다"); }
+  if (!file || typeof file !== "object" || Array.isArray(file)) throw new Error("세이브 형식이 맞지 않습니다");
+  const { fieldwork = { v: 1, sites: {}, photos: {} }, ...game } = file;
+  const g = readSave(JSON.stringify(game));
   if (!g) throw new Error("세이브 형식이 맞지 않습니다");
-  localStorage.setItem(SAVE_KEY, JSON.stringify(g));
+  writeStorage([...fieldSaveWrites(fieldwork), [SAVE_KEY, JSON.stringify(g)]]);
   return g;
 }
 
