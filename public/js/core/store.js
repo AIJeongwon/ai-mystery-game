@@ -107,6 +107,8 @@ function readSave(text) {
   const today = g?.outlet?.today;
   if (today && typeof today === "object" && !Array.isArray(today) && !Object.hasOwn(today, "otherIncome")) today.otherIncome = 0;
   if (g?.v !== SAVE_VERSION || !matchesSaveShape(g, saveShape)) return null;
+  // 언론 자유가 추가된 저장도 읽되 잘못된 선택 필드는 기존 기록에 반영하지 않는다.
+  if (Object.values(g.world.c).some((d) => d?.press !== undefined && (!Number.isFinite(d.press) || d.press < 0 || d.press > 100))) return null;
   // 프롤로그가 수능 사건으로 바뀌었다. 옛 프롤로그 도중의 저장은 새 프롤로그의 처음으로 돌린다.
   const c = g.campaign;
   if (c.ch === "prologue" && (c.beat !== 0 || !c.flags.quietWorld || c.objectives?.[0]?.items?.[0]?.id !== "nation")) Object.assign(c, { beat: 0, entered: false, objectives: [] });

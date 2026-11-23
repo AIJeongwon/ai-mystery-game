@@ -3,7 +3,7 @@ import { G } from "../../core/store.js";
 import { emit } from "../../core/bus.js";
 import { clamp, rand, chance, uid, HOUR, cleanText } from "../../core/util.js";
 import { EVENT_TYPES } from "../../data/templates.js";
-import { cd, now, actor, presence, portraitFor } from "./query.js";
+import { cd, now, actor, presence, portraitFor, pressFreedom } from "./query.js";
 import { feed } from "./feed.js";
 
 // ───────── 사건 생성 ─────────
@@ -95,15 +95,19 @@ export function closeEvent(ev, forced) {
   const thresh = 24 + ev.sig * 9;
   const P = ev.pressure + ev.bias * 14;
   const hi = forced?.hi ?? P >= thresh;
-  ev.outcome = { hi, text: forced?.text ?? T.out?.[hi ? 0 : 1] ?? "사건은 마무리됐다" };
+  const outcomeIdx = hi ? 0 : 1;
+  ev.outcome = { hi, text: forced?.text ?? T.out?.[outcomeIdx] ?? "사건은 마무리됐다" };
   const mul = hi ? 1.25 : 0.45;
-  const imp = T.impact || {};
+  // 결말별로 지정한 항목만 덮어쓴다. 높은 언론 압력이 항상 긍정적인 효과를 뜻하지는 않는다.
+  const imp = { ...T.impact, ...T.outcomeImpact?.[outcomeIdx] };
   const d = cd(ev.country);
   if (d) {
     if (imp.stab) d.stab = clamp(d.stab + imp.stab * 4 * mul, 2, 98);
     if (imp.appr) d.appr = clamp(d.appr + imp.appr * 5 * mul, 3, 95);
     if (imp.econ) d.econ = clamp(d.econ + imp.econ * 4 * mul, 3, 98);
     if (imp.tens) d.tens = clamp(d.tens + imp.tens * 5 * mul, 0, 100);
+    if (imp.attn) d.attn = clamp(d.attn + imp.attn * 7 * mul, 0, 100);
+    if (imp.press) d.press = clamp(pressFreedom(ev.country) + imp.press * 5 * mul, 0, 100);
   }
   const a = ev.actor && actor(ev.actor);
   if (a && imp.rep) a.rep = clamp(a.rep + imp.rep * 7 * mul, 2, 98);
