@@ -8,6 +8,8 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "test": "node --test \"tests/*.test.mjs\"",
+    "test:http": "node --test \"tests/http/*.test.mjs\"",
+    "test:llm": "node tools/llm-live.mjs",
     "lint": "eslint .",
     "regress": "node tools/regression.mjs",
     "check": "npm run lint && npm test && npm run regress"
