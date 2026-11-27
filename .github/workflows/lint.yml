@@ -1,0 +1,35 @@
+name: 린트 검사
+
+on:
+  pull_request:
+    branches: [main, develop, 'release/**']
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: 린트
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: 코드 가져오기
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Node.js 준비
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: 의존성 설치
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: 린트 실행
+        run: npm run lint

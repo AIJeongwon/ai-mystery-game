@@ -1,0 +1,37 @@
+name: 실제 LLM 검사
+
+# 논리 요청 3개, SDK 재시도 포함 최대 9회다. 포크 PR의 코드는 키를 받지 않는다.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llm-live
+  cancel-in-progress: false
+
+jobs:
+  llm:
+    name: 실제 LLM 응답
+    if: github.repository == 'AIJeongwon/ai-mystery-game' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: 코드 가져오기
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Node.js 준비
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: 의존성 설치
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: 실제 LLM 호출과 응답 검사
+        env:
+          RUN_LIVE_LLM: '1'
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL }}
+        run: npm run test:llm
